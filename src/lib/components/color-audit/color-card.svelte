@@ -59,11 +59,11 @@
 	{#if isSimulated}
 		<!-- Split swatch: original left, simulated right -->
 		<div class="relative flex h-16">
-			<div
-				class="flex flex-1 items-center justify-center"
-				style="background-color: {color.hex};"
-			>
-				<span class="font-mono text-[9px] font-bold" style="color: {textOnOriginal}; opacity: 0.85;">
+			<div class="flex flex-1 items-center justify-center" style="background-color: {color.hex};">
+				<span
+					class="font-mono text-[9px] font-bold"
+					style="color: {textOnOriginal}; opacity: 0.85;"
+				>
 					{color.hex}
 				</span>
 			</div>

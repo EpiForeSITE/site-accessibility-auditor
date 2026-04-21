@@ -88,23 +88,24 @@
 
 	<!-- Filter buttons -->
 	<div class="flex gap-1 border-b px-4 py-2" style="border-color: var(--panel-border);">
-		{#each [
-			{ key: 'all', label: 'All', count: summary.total },
-			{ key: 'fail', label: 'Fail', count: summary.fail },
-			{ key: 'warning', label: 'Warn', count: summary.warning },
-			{ key: 'pass', label: 'Pass', count: summary.pass }
-		] as btn (btn.key)}
+		{#each [{ key: 'all', label: 'All', count: summary.total }, { key: 'fail', label: 'Fail', count: summary.fail }, { key: 'warning', label: 'Warn', count: summary.warning }, { key: 'pass', label: 'Pass', count: summary.pass }] as btn (btn.key)}
 			<button
 				onclick={() => (filter = btn.key as FilterType)}
 				class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {filter === btn.key
 					? 'text-white'
 					: 'hover:bg-[var(--panel-hover)]'}"
-				style="background-color: {filter === btn.key ? 'var(--panel-filter-active-bg)' : 'transparent'}; color: {filter === btn.key ? 'var(--panel-filter-active-text)' : 'var(--panel-text-muted)'};"
+				style="background-color: {filter === btn.key
+					? 'var(--panel-filter-active-bg)'
+					: 'transparent'}; color: {filter === btn.key
+					? 'var(--panel-filter-active-text)'
+					: 'var(--panel-text-muted)'};"
 			>
 				{btn.label}
 				<span
 					class="ml-1 rounded-full px-1.5 py-0.5 text-[10px]"
-					style="background-color: {filter === btn.key ? 'rgba(255,255,255,0.2)' : 'var(--panel-filter-inactive-bg)'};"
+					style="background-color: {filter === btn.key
+						? 'rgba(255,255,255,0.2)'
+						: 'var(--panel-filter-inactive-bg)'};"
 				>
 					{btn.count}
 				</span>
@@ -125,7 +126,11 @@
 						<button
 							onclick={() => handleSelect(element.id)}
 							class="w-full border-l-3 px-4 py-3 text-left transition-colors hover:bg-[var(--panel-hover)]"
-							style="border-left-color: {selectedId === element.id ? 'var(--panel-primary)' : statusColor(element.status)}; background-color: {selectedId === element.id ? 'var(--panel-selected)' : 'transparent'};"
+							style="border-left-color: {selectedId === element.id
+								? 'var(--panel-primary)'
+								: statusColor(element.status)}; background-color: {selectedId === element.id
+								? 'var(--panel-selected)'
+								: 'transparent'};"
 						>
 							<div class="flex items-start gap-2">
 								<span
@@ -157,5 +162,5 @@
 				{/each}
 			</ul>
 		{/if}
-		</div>
+	</div>
 </div>

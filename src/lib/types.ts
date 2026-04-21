@@ -10,6 +10,8 @@ export interface AuditElement {
 	tag: string;
 	text: string;
 	rect: ElementRect;
+	selector?: string | null;
+	domPath?: string | null;
 	attributes: Record<string, string | null>;
 	status: 'pass' | 'warning' | 'fail';
 	touchWidth: number;

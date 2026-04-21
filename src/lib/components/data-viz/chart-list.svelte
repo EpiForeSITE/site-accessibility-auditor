@@ -15,6 +15,10 @@
 	let imgCount = $derived(charts.filter((c) => c.type === 'img').length);
 	let containerCount = $derived(charts.filter((c) => c.type === 'container').length);
 	let missingNames = $derived(charts.filter((c) => !c.hasAccessibleName).length);
+	let missingFallbacks = $derived(
+		charts.filter((c) => !c.captionText && !c.hasTableFallback).length
+	);
+	let keyboardRisks = $derived(charts.filter((c) => !c.supportsKeyboard).length);
 </script>
 
 <!-- Summary bar -->
@@ -42,6 +46,16 @@
 	{#if missingNames > 0}
 		<span class="ml-auto" style="color: var(--panel-warning-text);">
 			{missingNames} missing accessible name{missingNames !== 1 ? 's' : ''}
+		</span>
+	{/if}
+	{#if missingFallbacks > 0}
+		<span style="color: var(--panel-warning-text);">
+			{missingFallbacks} missing summary/table fallback
+		</span>
+	{/if}
+	{#if keyboardRisks > 0}
+		<span style="color: var(--panel-warning-text);">
+			{keyboardRisks} keyboard risk{keyboardRisks !== 1 ? 's' : ''}
 		</span>
 	{/if}
 </div>

@@ -11,8 +11,19 @@ export interface ColorSection {
 	colors: ColorEntry[];
 }
 
+export interface ColorFinding {
+	title: string;
+	severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+	wcag: string;
+	summary: string;
+	fix_hint: string;
+	affected_colors: string[];
+}
+
 export interface ColorAuditResult {
 	sections: ColorSection[];
+	findings: ColorFinding[];
+	modelVersion: string;
 	pageUrl: string;
 	timestamp: string;
 }
@@ -27,6 +38,7 @@ export interface DomElement {
 	tag: string;
 	text: string;
 	path: string;
+	rect?: { x: number; y: number; width: number; height: number };
 	colors: Record<string, string>;
 	attributes: Record<string, string | null>;
 }

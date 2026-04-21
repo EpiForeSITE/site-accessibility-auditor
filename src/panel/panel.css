@@ -22,6 +22,12 @@
 	--panel-filter-active-text: #ffffff;
 	--panel-filter-inactive-bg: #f3f4f6;
 	--panel-summary-bg: #f9fafb;
+	--panel-success-bg: #f0fdf4;
+	--panel-success-border: #bbf7d0;
+	--panel-success-text: #166534;
+	--panel-warning-bg: #fffbeb;
+	--panel-warning-border: #fde68a;
+	--panel-warning-text: #92400e;
 	--status-fail: #ef4444;
 	--status-warning: #f59e0b;
 	--status-pass: #22c55e;
@@ -48,6 +54,12 @@
 	--panel-filter-active-text: #ffffff;
 	--panel-filter-inactive-bg: #383838;
 	--panel-summary-bg: #252526;
+	--panel-success-bg: #1a2e1a;
+	--panel-success-border: #2d5a2d;
+	--panel-success-text: #86efac;
+	--panel-warning-bg: #3d2f0f;
+	--panel-warning-border: #78600e;
+	--panel-warning-text: #fde68a;
 	--status-fail: #f87171;
 	--status-warning: #fbbf24;
 	--status-pass: #4ade80;

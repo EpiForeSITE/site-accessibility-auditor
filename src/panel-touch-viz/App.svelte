@@ -120,9 +120,7 @@
 						/>
 					</svg>
 				</div>
-				<h2 class="mb-1 text-sm font-semibold text-[var(--panel-text)]">
-					Scanning Page
-				</h2>
+				<h2 class="mb-1 text-sm font-semibold text-[var(--panel-text)]">Scanning Page</h2>
 				<p class="max-w-xs text-xs text-[var(--panel-text-muted)]">
 					Searching the DOM for data visualization charts, SVGs, canvas elements, and images...
 				</p>

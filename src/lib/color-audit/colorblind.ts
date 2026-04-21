@@ -71,7 +71,11 @@ const MATRICES: Record<ColorblindMode, number[]> = {
 
 function hexToRgb(hex: string): [number, number, number] {
 	const h = hex.replace('#', '');
-	return [parseInt(h.slice(0, 2), 16) / 255, parseInt(h.slice(2, 4), 16) / 255, parseInt(h.slice(4, 6), 16) / 255];
+	return [
+		parseInt(h.slice(0, 2), 16) / 255,
+		parseInt(h.slice(2, 4), 16) / 255,
+		parseInt(h.slice(4, 6), 16) / 255
+	];
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -95,16 +99,20 @@ function hexToXyz(hex: string): [number, number, number] {
 	const [r, g, b] = hexToRgb(hex).map(linearize);
 	return [
 		0.4124564 * r + 0.3575761 * g + 0.1804375 * b,
-		0.2126729 * r + 0.7151522 * g + 0.0721750 * b,
-		0.0193339 * r + 0.1191920 * g + 0.9503041 * b
+		0.2126729 * r + 0.7151522 * g + 0.072175 * b,
+		0.0193339 * r + 0.119192 * g + 0.9503041 * b
 	];
 }
 
 /** CIE XYZ -> CIELAB (D65 reference white) */
 function xyzToLab(x: number, y: number, z: number): [number, number, number] {
-	const Xn = 0.95047, Yn = 1.0, Zn = 1.08883;
+	const Xn = 0.95047,
+		Yn = 1.0,
+		Zn = 1.08883;
 	const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-	const fx = f(x / Xn), fy = f(y / Yn), fz = f(z / Zn);
+	const fx = f(x / Xn),
+		fy = f(y / Yn),
+		fz = f(z / Zn);
 	return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
 

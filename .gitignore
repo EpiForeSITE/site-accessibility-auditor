@@ -3,6 +3,7 @@ node_modules
 # Output
 /dist
 .output
+.tmp-tests
 
 # OS
 .DS_Store

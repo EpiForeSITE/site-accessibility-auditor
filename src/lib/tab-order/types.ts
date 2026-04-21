@@ -5,6 +5,7 @@ export interface TabOrderElement {
 	role: string | null;
 	tabindex: number | null;
 	rect: { x: number; y: number; width: number; height: number };
+	path?: string | null;
 	attributes: Record<string, string | null>;
 	focusable: 'natural' | 'programmatic';
 }

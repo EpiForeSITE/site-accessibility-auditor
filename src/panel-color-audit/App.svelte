@@ -174,9 +174,7 @@
 							/>
 						</svg>
 					</div>
-					<h2 class="mb-1 text-sm font-semibold text-[var(--panel-text)]">
-						Analyzing Page Colors
-					</h2>
+					<h2 class="mb-1 text-sm font-semibold text-[var(--panel-text)]">Analyzing Page Colors</h2>
 					<p class="max-w-xs text-xs text-[var(--panel-text-muted)]">
 						Extracting colors from the DOM and using GPT-5.2-pro to identify and group them by
 						section...
@@ -207,9 +205,7 @@
 						Extract and visualize all colors from the inspected page, intelligently grouped into
 						semantic sections by AI.
 					</p>
-					<div
-						class="mt-5 grid grid-cols-3 gap-3 text-center"
-					>
+					<div class="mt-5 grid grid-cols-3 gap-3 text-center">
 						<div
 							class="rounded-lg border p-2.5"
 							style="border-color: var(--panel-border); background-color: var(--panel-bg-elevated);"

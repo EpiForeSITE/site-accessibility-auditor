@@ -19,7 +19,13 @@ function copyExtensionFiles() {
 			// moving one level shallower we need ../ (one dir up from X/).
 			const srcDir = resolve(dist, 'src');
 			if (existsSync(srcDir)) {
-				for (const dir of ['devtools', 'panel', 'panel-touch-viz', 'panel-color-audit', 'panel-tab-order']) {
+				for (const dir of [
+					'devtools',
+					'panel',
+					'panel-touch-viz',
+					'panel-color-audit',
+					'panel-tab-order'
+				]) {
 					const htmlSrc = join(srcDir, dir, `${dir}.html`);
 					const htmlDest = join(dist, dir, `${dir}.html`);
 					if (existsSync(htmlSrc)) {
@@ -46,7 +52,7 @@ export default defineConfig({
 				panel: resolve(__dirname, 'src/panel/panel.html'),
 				'panel-touch-viz': resolve(__dirname, 'src/panel-touch-viz/panel-touch-viz.html'),
 				'panel-color-audit': resolve(__dirname, 'src/panel-color-audit/panel-color-audit.html'),
-			'panel-tab-order': resolve(__dirname, 'src/panel-tab-order/panel-tab-order.html')
+				'panel-tab-order': resolve(__dirname, 'src/panel-tab-order/panel-tab-order.html')
 			},
 			output: {
 				entryFileNames: '[name]/[name].js',

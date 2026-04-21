@@ -1,51 +1,45 @@
-import type { ColorAuditResult, ColorSection, DomColorData } from './types.ts';
+import type {
+	ColorAuditResult,
+	ColorEntry,
+	ColorFinding,
+	ColorSection,
+	DomColorData
+} from './types.ts';
 
-const MODEL = 'gpt-5.2-pro';
 const API_URL = 'https://api.openai.com/v1/responses';
+const MODEL = 'gpt-5.2-pro';
 
-const INSTRUCTIONS = `You are an expert color accessibility auditor for websites. You will receive a JSON object describing a webpage's DOM elements and their computed CSS colors.
+function validateColorEntry(entry: Partial<ColorEntry>): entry is ColorEntry {
+	return Boolean(entry.hex && entry.usage && entry.element && entry.context);
+}
 
-Your task:
-1. Analyze the page structure and identify logical, human-readable sections (e.g. "Navigation Bar", "Hero Section", "Data Visualization — Concentration Levels", "Footer", "Sidebar Filters", "Chart Legend", etc.).
-2. Group every distinct color into the section where it appears. Name sections descriptively based on the content and purpose of the elements.
-3. For each color in a section, report:
-   - "hex": the color in lowercase 6-digit hex (e.g. "#1a2b3c")
-   - "usage": one of "background", "text", "border", "fill", "stroke", "outline", or "other"
-   - "element": the HTML tag and key identifier (e.g. "h1#title", "div.chart-container", "svg rect")
-   - "context": a short human-readable description of what this color is used for (e.g. "Heading text color", "Chart bar for high concentration", "Navigation background")
+function parseOutputText(data: unknown): string {
+	const response = data as {
+		output?: Array<{
+			type?: string;
+			role?: string;
+			content?: Array<{ type?: string; text?: string }>;
+		}>;
+		output_text?: string;
+	};
 
-Rules:
-- Deduplicate: if the same hex + usage combination appears multiple times in a section, keep only one representative entry.
-- Skip fully transparent colors and default browser-agent colors (like transparent backgrounds on generic divs with no visual presence).
-- Normalize all hex values to lowercase 6-digit format.
-- If the page has data visualization elements (charts, graphs, maps, legends), create dedicated sections for them and label the colors by what they represent when possible.
-- Order sections from top-of-page to bottom-of-page as they appear in the DOM.
-- Aim for clear, descriptive section names that a non-technical person can understand.
+	const outputMessage =
+		response.output?.find((item) => item.type === 'message' && item.role === 'assistant') ??
+		response.output?.find((item) => item.type === 'message');
+	const textBlock = outputMessage?.content?.find((block) => block.type === 'output_text');
+	const content = textBlock?.text ?? response.output_text;
 
-You MUST respond with ONLY a single JSON object (no markdown fences, no commentary) matching this exact structure:
-{
-  "sections": [
-    {
-      "name": "Section Name",
-      "description": "Brief description of what this section contains",
-      "colors": [
-        {
-          "hex": "#1a2b3c",
-          "usage": "background",
-          "element": "div.container",
-          "context": "Main content area background"
-        }
-      ]
-    }
-  ]
-}`;
+	if (!content) {
+		throw new Error('Empty response from OpenAI');
+	}
 
-export async function extractColorSections(
-	apiKey: string,
-	domData: DomColorData
-): Promise<ColorAuditResult> {
-	const userMessage = `Analyze this webpage and extract all colors grouped by section.\n\nPage: ${domData.pageTitle} (${domData.url})\n\nDOM elements with colors (${domData.elements.length} total):\n${JSON.stringify(domData.elements)}`;
+	return content
+		.replace(/^```(?:json)?\s*\n?/i, '')
+		.replace(/\n?```\s*$/i, '')
+		.trim();
+}
 
+async function requestJson<T>(apiKey: string, instructions: string, input: string): Promise<T> {
 	const response = await fetch(API_URL, {
 		method: 'POST',
 		headers: {
@@ -54,42 +48,95 @@ export async function extractColorSections(
 		},
 		body: JSON.stringify({
 			model: MODEL,
-			instructions: INSTRUCTIONS,
-			input: userMessage,
+			instructions,
+			input,
 			reasoning: { effort: 'medium' }
 		})
 	});
 
 	if (!response.ok) {
 		const err = await response.json().catch(() => null);
-		const msg = err?.error?.message ?? `API request failed (${response.status})`;
+		const msg =
+			(err as { error?: { message?: string } } | null)?.error?.message ??
+			`API request failed (${response.status})`;
 		throw new Error(msg);
 	}
 
 	const data = await response.json();
+	return JSON.parse(parseOutputText(data)) as T;
+}
 
-	// Responses API: find the assistant message output
-	const outputMessage = data.output?.find(
-		(item: { type: string }) => item.type === 'message' && item.role === 'assistant'
-	) ??
-		data.output?.find((item: { type: string }) => item.type === 'message');
+function normalizeColorSections(sections: Array<Partial<ColorSection>>): ColorSection[] {
+	return sections
+		.map((section) => ({
+			name: section.name?.trim() || 'Unlabeled Section',
+			description: section.description?.trim() || 'Grouped by semantic region.',
+			colors: Array.isArray(section.colors)
+				? section.colors.filter(validateColorEntry).map((color) => ({
+						hex: color.hex.toLowerCase(),
+						usage: color.usage,
+						element: color.element,
+						context: color.context
+					}))
+				: []
+		}))
+		.filter((section) => section.colors.length > 0);
+}
 
-	const textBlock = outputMessage?.content?.find(
-		(block: { type: string }) => block.type === 'output_text'
+function normalizeColorFindings(findings: Array<Partial<ColorFinding>>): ColorFinding[] {
+	return findings
+		.filter((finding) =>
+			Boolean(finding.title && finding.summary && finding.wcag && finding.fix_hint)
+		)
+		.map((finding) => ({
+			title: finding.title!,
+			severity: finding.severity ?? 'medium',
+			wcag: finding.wcag!,
+			summary: finding.summary!,
+			fix_hint: finding.fix_hint!,
+			affected_colors: Array.isArray(finding.affected_colors) ? finding.affected_colors : []
+		}));
+}
+
+export async function extractColorSections(
+	apiKey: string,
+	domData: DomColorData
+): Promise<ColorAuditResult> {
+	const instructions = `You are an expert accessibility auditor for websites. You will receive DOM color extraction data.
+
+Return JSON with two keys: "sections" and "findings".
+- "sections" groups colors into human-readable semantic sections from top to bottom.
+- "findings" contains accessibility-relevant color findings only, not generic design commentary.
+
+For each finding include:
+- "title"
+- "severity": one of critical/high/medium/low/info
+- "wcag"
+- "summary"
+- "fix_hint"
+- "affected_colors": array of hex colors
+
+Allowed finding topics:
+- likely low contrast clusters
+- color-only meaning in charts, legends, or status indicators
+- visually confusable palette groups
+- insufficient distinction between interactive states
+
+Respond with JSON only.`;
+
+	const parsed = await requestJson<{
+		sections?: Array<Partial<ColorSection>>;
+		findings?: Array<Partial<ColorFinding>>;
+	}>(
+		apiKey,
+		instructions,
+		`Page: ${domData.pageTitle} (${domData.url})\nDOM color data:\n${JSON.stringify(domData.elements)}`
 	);
 
-	const content = textBlock?.text ?? data.output_text;
-	if (!content) {
-		throw new Error('Empty response from OpenAI');
-	}
-
-	// Strip markdown code fences if the model wraps its JSON response
-	const cleaned = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
-
-	const parsed = JSON.parse(cleaned) as { sections: ColorSection[] };
-
 	return {
-		sections: parsed.sections,
+		sections: normalizeColorSections(parsed.sections ?? []),
+		findings: normalizeColorFindings(parsed.findings ?? []),
+		modelVersion: MODEL,
 		pageUrl: domData.url,
 		timestamp: new Date().toISOString()
 	};

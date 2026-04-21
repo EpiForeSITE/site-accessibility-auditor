@@ -135,7 +135,13 @@
 						{#if i < elements.length - 1}
 							<div
 								class="absolute top-[34px]"
-								style="left: {15 - lineWidth(i) / 2}px; width: {lineWidth(i)}px; background-color: {color}; opacity: {lineOpacity(i)}; height: calc(100% - 12px); transition: width 0.15s ease, opacity 0.15s ease, left 0.15s ease; border-radius: {lineWidth(i) / 2}px;"
+								style="left: {15 - lineWidth(i) / 2}px; width: {lineWidth(
+									i
+								)}px; background-color: {color}; opacity: {lineOpacity(
+									i
+								)}; height: calc(100% - 12px); transition: width 0.15s ease, opacity 0.15s ease, left 0.15s ease; border-radius: {lineWidth(
+									i
+								) / 2}px;"
 							></div>
 						{/if}
 

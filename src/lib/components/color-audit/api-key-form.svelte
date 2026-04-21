@@ -91,7 +91,7 @@
 					type={showKey ? 'text' : 'password'}
 					bind:value={apiKey}
 					placeholder="sk-..."
-					class="w-full rounded-lg border px-3 py-2.5 pr-10 text-xs outline-none transition-colors"
+					class="w-full rounded-lg border px-3 py-2.5 pr-10 text-xs transition-colors outline-none"
 					style="
 						border-color: var(--panel-border);
 						background-color: var(--panel-bg);

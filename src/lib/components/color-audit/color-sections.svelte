@@ -143,7 +143,7 @@
 					class="flex w-full items-center gap-2 px-4 py-3 text-left transition-colors hover:bg-[var(--panel-hover)]"
 				>
 					<svg
-						class="h-3.5 w-3.5 shrink-0 transition-transform text-[var(--panel-text-subtle)]"
+						class="h-3.5 w-3.5 shrink-0 text-[var(--panel-text-subtle)] transition-transform"
 						class:rotate-90={!collapsedSections.has(i)}
 						fill="none"
 						stroke="currentColor"
@@ -207,7 +207,7 @@
 
 					<!-- Colors grid -->
 					<div
-						class="border-t px-4 pb-4 pt-3"
+						class="border-t px-4 pt-3 pb-4"
 						style="border-color: var(--panel-border); background-color: var(--panel-bg);"
 					>
 						<div
@@ -217,9 +217,7 @@
 							{#each section.colors as color (color.hex + color.usage + color.element)}
 								<ColorCard
 									{color}
-									simulatedHex={isSimulating
-										? simulateColorblind(color.hex, selectedMode)
-										: null}
+									simulatedHex={isSimulating ? simulateColorblind(color.hex, selectedMode) : null}
 								/>
 							{/each}
 						</div>

@@ -88,6 +88,7 @@ function buildExtractionExpression(): string {
 					tag: tag,
 					text: text.replace(/\\s+/g, ' '),
 					path: getPath(el),
+					rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
 					colors: colors,
 					attributes: attrs
 				});

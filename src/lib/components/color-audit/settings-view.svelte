@@ -67,12 +67,7 @@
 			aria-label="Back"
 		>
 			<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M15 19l-7-7 7-7"
-				/>
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
 			</svg>
 		</button>
 		<h1 class="text-sm font-semibold text-[var(--panel-text)]">Settings</h1>
@@ -109,9 +104,7 @@
 
 			<!-- Current key display -->
 			<div class="mb-4">
-				<div class="mb-1 text-xs font-medium text-[var(--panel-text-subtle)]">
-					Current Key
-				</div>
+				<div class="mb-1 text-xs font-medium text-[var(--panel-text-subtle)]">Current Key</div>
 				<div
 					class="rounded-lg border px-3 py-2 font-mono text-xs"
 					style="border-color: var(--panel-border); background-color: var(--panel-bg); color: var(--panel-text-muted);"

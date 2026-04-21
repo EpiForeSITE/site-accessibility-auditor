@@ -9,6 +9,8 @@ interface RawElement {
 	tag: string;
 	text: string;
 	rect: { x: number; y: number; width: number; height: number };
+	selector: string | null;
+	domPath: string | null;
 	attributes: Record<string, string | null>;
 	status: 'pass' | 'warning' | 'fail';
 }
@@ -43,6 +45,8 @@ function toAuditElement(el: RawElement, index: number): AuditElement {
 		tag: el.tag,
 		text: el.text,
 		rect: el.rect,
+		selector: el.selector,
+		domPath: el.domPath,
 		attributes: el.attributes,
 		status: el.status,
 		touchWidth: Math.round(el.rect.width),
@@ -60,6 +64,36 @@ function buildAuditExpression(): string {
 	var SELECTOR = ${JSON.stringify(INTERACTIVE_SELECTORS)};
 	var MIN = ${TOUCH_TARGET_MINIMUM};
 	var REC = ${TOUCH_TARGET_RECOMMENDED};
+
+	function cssEscape(value) {
+		if (window.CSS && window.CSS.escape) return window.CSS.escape(value);
+		return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
+	}
+
+	function getPath(el) {
+		var parts = [];
+		var cur = el;
+		while (cur && cur !== document.body && parts.length < 6) {
+			var tag = cur.tagName.toLowerCase();
+			var nth = 1;
+			var sib = cur;
+			while ((sib = sib.previousElementSibling)) {
+				if (sib.tagName === cur.tagName) nth++;
+			}
+			parts.unshift(tag + ':nth-of-type(' + nth + ')');
+			cur = cur.parentElement;
+		}
+		return parts.join(' > ');
+	}
+
+	function getSelector(el) {
+		if (el.id) return '#' + cssEscape(el.id);
+		var aria = el.getAttribute('aria-label');
+		if (aria) return el.tagName.toLowerCase() + '[aria-label="' + aria.replace(/"/g, '\\"') + '"]';
+		var name = el.getAttribute('name');
+		if (name) return el.tagName.toLowerCase() + '[name="' + name.replace(/"/g, '\\"') + '"]';
+		return getPath(el);
+	}
 
 	document.querySelectorAll('[data-audit-id]').forEach(function(el) {
 		el.removeAttribute('data-audit-id');
@@ -93,6 +127,8 @@ function buildAuditExpression(): string {
 			tag: el.tagName.toLowerCase(),
 			text: text,
 			rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+			selector: getSelector(el),
+			domPath: getPath(el),
 			attributes: {
 				id: el.id || null,
 				class: el.className && typeof el.className === 'string' ? el.className : null,

@@ -72,6 +72,17 @@ function buildExtractionExpression(): string {
 			|| '';
 	}
 
+	function collectLabels(root, selector, limit) {
+		var values = [];
+		if (!root) return values;
+		var nodes = root.querySelectorAll(selector);
+		for (var i = 0; i < nodes.length && values.length < limit; i++) {
+			var text = (nodes[i].textContent || '').replace(/\\s+/g, ' ').trim();
+			if (text && values.indexOf(text) === -1) values.push(text.substring(0, 80));
+		}
+		return values;
+	}
+
 	function getFigcaption(el) {
 		var figure = el.closest('figure');
 		if (figure) {
@@ -95,6 +106,44 @@ function buildExtractionExpression(): string {
 		return shapes.length;
 	}
 
+	function detectTableFallback(el) {
+		var figure = el.closest('figure');
+		if (figure && figure.querySelector('table')) return true;
+		var parent = el.parentElement;
+		if (!parent) return false;
+		return !!parent.querySelector('table');
+	}
+
+	function detectKeyboardSupport(el) {
+		if (el.matches('[tabindex], a[href], button, input, select, textarea, summary')) return true;
+		return !!el.querySelector('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+	}
+
+	function collectColorChannels(el) {
+		var values = [];
+		var nodes = [el];
+		var childMatches = el.querySelectorAll('path, rect, circle, line, polyline, polygon, ellipse, [style], [fill], [stroke]');
+		for (var i = 0; i < childMatches.length && i < 24; i++) nodes.push(childMatches[i]);
+		for (var j = 0; j < nodes.length; j++) {
+			var cs = getComputedStyle(nodes[j]);
+			var fill = cs.fill || '';
+			var stroke = cs.stroke || '';
+			var bg = cs.backgroundColor || '';
+			[fill, stroke, bg].forEach(function(value) {
+				if (!value || value === 'none' || value === 'transparent' || value === 'rgba(0, 0, 0, 0)') return;
+				if (values.indexOf(value) === -1) values.push(value);
+			});
+			if (values.length >= 8) break;
+		}
+		return values.slice(0, 8);
+	}
+
+	function collectNearbyControls(el) {
+		var parent = el.parentElement;
+		if (!parent) return [];
+		return collectLabels(parent, 'button, a[href], input[type="button"], input[type="submit"], [role="button"]', 6);
+	}
+
 	function addChart(el, type, library) {
 		if (seen.has(el)) return;
 		seen.add(el);
@@ -106,11 +155,20 @@ function buildExtractionExpression(): string {
 		if (!label) {
 			label = type.toUpperCase() + ' element (' + Math.round(rect.width) + '\\u00d7' + Math.round(rect.height) + ')';
 		}
+		var captionText = getFigcaption(el) || null;
+		var accessibleName = getLabel(el) || null;
 
 		var shapeCount = 0;
 		if (type === 'svg') {
 			shapeCount = countShapes(el);
 		}
+
+		var legendItems = collectLabels(el.parentElement || el, 'legend text, .legend text, .legend-item, .highcharts-legend text, .plotly .legendtext, .vega-bind-name, [role="listitem"]', 8);
+		var seriesLabels = collectLabels(el, '[aria-label], title, text', 10);
+		var hasTableFallback = detectTableFallback(el);
+		var supportsKeyboard = detectKeyboardSupport(el);
+		var colorChannels = collectColorChannels(el);
+		var nearbyControls = collectNearbyControls(el);
 
 		el.setAttribute('data-viz-id', String(charts.length));
 
@@ -119,10 +177,18 @@ function buildExtractionExpression(): string {
 			type: type,
 			library: library,
 			label: label.substring(0, 150),
+			accessibleName: accessibleName,
+			captionText: captionText,
 			dimensions: { width: Math.round(rect.width), height: Math.round(rect.height) },
 			rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
 			path: getPath(el),
 			hasAccessibleName: hasName,
+			hasTableFallback: hasTableFallback,
+			supportsKeyboard: supportsKeyboard,
+			legendItems: legendItems,
+			seriesLabels: seriesLabels,
+			colorChannels: colorChannels,
+			nearbyControls: nearbyControls,
 			childShapeCount: shapeCount
 		});
 	}

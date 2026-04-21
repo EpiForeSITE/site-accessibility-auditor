@@ -51,19 +51,22 @@
 		</div>
 
 		<!-- Warning items -->
-		<div class="border-t px-3 pb-2 pt-1" style="border-color: var(--panel-warning-border);">
+		<div class="border-t px-3 pt-1 pb-2" style="border-color: var(--panel-warning-border);">
 			{#each visibleWarnings as w, idx (w.color1.hex + w.color2.hex + idx)}
-				<div class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t' : ''}" style="{idx > 0 ? 'border-color: var(--panel-warning-border);' : ''} opacity: 0.95;">
+				<div
+					class="flex items-center gap-2 py-1.5 {idx > 0 ? 'border-t' : ''}"
+					style="{idx > 0 ? 'border-color: var(--panel-warning-border);' : ''} opacity: 0.95;"
+				>
 					<!-- Original pair -->
 					<span
 						class="h-4 w-4 shrink-0 rounded-full border"
 						style="background-color: {w.color1.hex}; border-color: var(--panel-warning-border);"
-						title="{w.color1.hex}"
+						title={w.color1.hex}
 					></span>
 					<span
 						class="h-4 w-4 shrink-0 rounded-full border"
 						style="background-color: {w.color2.hex}; border-color: var(--panel-warning-border);"
-						title="{w.color2.hex}"
+						title={w.color2.hex}
 					></span>
 					<!-- Arrow -->
 					<svg
@@ -84,15 +87,18 @@
 					<span
 						class="h-4 w-4 shrink-0 rounded-full border"
 						style="background-color: {w.simulatedHex1}; border-color: var(--panel-warning-border);"
-						title="{w.simulatedHex1}"
+						title={w.simulatedHex1}
 					></span>
 					<span
 						class="h-4 w-4 shrink-0 rounded-full border"
 						style="background-color: {w.simulatedHex2}; border-color: var(--panel-warning-border);"
-						title="{w.simulatedHex2}"
+						title={w.simulatedHex2}
 					></span>
 					<!-- Description -->
-					<span class="min-w-0 flex-1 text-[10px] leading-snug" style="color: var(--panel-warning-text);">
+					<span
+						class="min-w-0 flex-1 text-[10px] leading-snug"
+						style="color: var(--panel-warning-text);"
+					>
 						<strong class="font-mono">{w.color1.hex}</strong>
 						<span class="opacity-70">({usageLabels[w.color1.usage] ?? w.color1.usage})</span>
 						and

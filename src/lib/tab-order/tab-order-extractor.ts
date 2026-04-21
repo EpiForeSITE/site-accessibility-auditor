@@ -9,6 +9,22 @@ function buildScanExpression(): string {
 		'audio[controls]', 'video[controls]', 'details'
 	].join(', ');
 
+	function getPath(el) {
+		var parts = [];
+		var cur = el;
+		while (cur && cur !== document.body && parts.length < 6) {
+			var tag = cur.tagName.toLowerCase();
+			var nth = 1;
+			var sib = cur;
+			while ((sib = sib.previousElementSibling)) {
+				if (sib.tagName === cur.tagName) nth++;
+			}
+			parts.unshift(tag + ':nth-of-type(' + nth + ')');
+			cur = cur.parentElement;
+		}
+		return parts.join(' > ');
+	}
+
 	document.querySelectorAll('[data-tab-order-id]').forEach(function(el) {
 		el.removeAttribute('data-tab-order-id');
 	});
@@ -61,6 +77,7 @@ function buildScanExpression(): string {
 			role: el.getAttribute('role'),
 			tabindex: item.tabindex,
 			rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+			path: getPath(el),
 			attributes: {
 				id: el.id || null,
 				class: el.className && typeof el.className === 'string' ? el.className : null,
@@ -82,12 +99,15 @@ function buildScanExpression(): string {
 const DYNAMIC_CONTAINER_SELECTORS = [
 	'canvas',
 	'.leaflet-container',
-	'.mapboxgl-map', '.maplibregl-map',
+	'.mapboxgl-map',
+	'.maplibregl-map',
 	'.ol-viewport',
 	'[class*="gm-style"]',
-	'.plotly', '.js-plotly-plot',
+	'.plotly',
+	'.js-plotly-plot',
 	'.highcharts-container',
-	'.echarts', '[class*="echarts"]',
+	'.echarts',
+	'[class*="echarts"]',
 	'[data-highcharts-chart]',
 	'.vis-network',
 	'.sigma-container',
@@ -395,6 +415,7 @@ interface RawElement {
 	role: string | null;
 	tabindex: number | null;
 	rect: { x: number; y: number; width: number; height: number };
+	path?: string | null;
 	attributes: Record<string, string | null>;
 	focusable: 'natural' | 'programmatic';
 }
@@ -417,6 +438,7 @@ export async function scanTabOrder(color: string = '#2563eb'): Promise<TabOrderR
 		role: el.role,
 		tabindex: el.tabindex,
 		rect: el.rect,
+		path: el.path,
 		attributes: el.attributes,
 		focusable: el.focusable
 	}));

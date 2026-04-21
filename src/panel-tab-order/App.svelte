@@ -238,8 +238,8 @@
 				</div>
 				<h2 class="mb-1 text-sm font-semibold text-[var(--panel-text)]">Tab Order Visualizer</h2>
 				<p class="mb-1 max-w-xs text-xs text-[var(--panel-text-muted)]">
-					Visualize the keyboard tab order of the inspected page. See numbered overlays on
-					elements and follow the focus sequence.
+					Visualize the keyboard tab order of the inspected page. See numbered overlays on elements
+					and follow the focus sequence.
 				</p>
 				<div class="mt-5 grid grid-cols-3 gap-3 text-center">
 					<div

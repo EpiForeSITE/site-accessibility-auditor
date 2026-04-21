@@ -1,10 +1,10 @@
 {
 	"manifest_version": 3,
-	"name": "Touch Target Auditor",
+	"name": "Site Accessibility Auditor",
 	"version": "1.0.0",
-	"description": "Audit interactive elements for mobile touch target compliance with WCAG guidelines.",
+	"description": "DevTools-based accessibility auditing for touch targets, keyboard flow, charts, and AI-assisted color analysis.",
 	"devtools_page": "devtools/devtools.html",
-	"permissions": ["storage"],
+	"permissions": ["storage", "tabs"],
 	"host_permissions": ["https://api.openai.com/*"],
 	"icons": {
 		"16": "icons/icon-16.png",
