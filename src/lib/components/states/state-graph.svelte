@@ -1,16 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import type { StateGraph } from '../../session/types.ts';
-	import {
-		forceSimulation,
-		forceLink,
-		forceManyBody,
-		forceCenter,
-		forceCollide,
-		type SimulationNodeDatum,
-		type SimulationLinkDatum,
-		type Simulation
-	} from '../../shared/d3-registry.ts';
+	import type { InteractionState, StateGraph } from '../../session/types.ts';
 
 	interface Props {
 		graph: StateGraph;
@@ -20,97 +9,59 @@
 
 	let { graph, selectedId, onselect }: Props = $props();
 
-	interface NodeDatum extends SimulationNodeDatum {
-		id: string;
-		label: string;
-		issues: number;
-		screenshot: string | null;
-		fails: number;
-	}
-	interface LinkDatum extends SimulationLinkDatum<NodeDatum> {
-		label: string;
-	}
-
-	// $state.raw so the array reference is reactive but contents are not proxied —
-	// d3-force mutates node.x/y/vx/vy in place and the deep $state proxy would
-	// interfere with its reference-based link resolution. We trigger re-renders
-	// explicitly through the `tick` counter on every simulation step.
-	let nodes = $state.raw<NodeDatum[]>([]);
-	let links = $state.raw<LinkDatum[]>([]);
-	let sim: Simulation<NodeDatum, LinkDatum> | null = null;
-	let tick = $state(0);
-
 	const width = 640;
 	const height = 360;
 	const cx = width / 2;
 	const cy = height / 2;
+	const nodeR = 24;
+	const nodeSelR = 30;
 
-	function build(): { nodes: NodeDatum[]; links: LinkDatum[] } {
-		const n: NodeDatum[] = graph.states.map((s, i) => {
-			// Seed each node on a ring around the center so the initial frame is
-			// already a sensible layout even if the simulation has not ticked yet.
-			const total = Math.max(1, graph.states.length);
-			const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
-			const radius = Math.min(width, height) * 0.3;
+	interface Positioned {
+		state: InteractionState;
+		x: number;
+		y: number;
+		angle: number;
+	}
+
+	// Deterministic radial layout: root at center, discovered states on a ring.
+	// Ordering is by severity so high-impact states land on top, keeping layout
+	// spatially stable across re-renders. No simulation, no tick loop.
+	const layout = $derived.by(() => {
+		const rootIdx = graph.states.findIndex((s) => s.id === graph.rootId);
+		const root = rootIdx >= 0 ? graph.states[rootIdx] : graph.states[0];
+		if (!root) return { root: null as Positioned | null, ring: [] as Positioned[] };
+		const others = graph.states.filter((s) => s.id !== root.id);
+		others.sort((a, b) => {
+			const d = b.result.summary.fail - a.result.summary.fail;
+			if (d !== 0) return d;
+			const w = b.result.summary.warning - a.result.summary.warning;
+			if (w !== 0) return w;
+			return a.discoveredAt.localeCompare(b.discoveredAt);
+		});
+		const radius = Math.min(width, height) * 0.36;
+		const rootPos: Positioned = { state: root, x: cx, y: cy, angle: 0 };
+		const ring: Positioned[] = others.map((s, i) => {
+			const angle = (i / Math.max(1, others.length)) * Math.PI * 2 - Math.PI / 2;
 			return {
-				id: s.id,
-				label: s.triggerLabel,
-				issues: s.result.summary.total,
-				fails: s.result.summary.fail,
-				screenshot: s.screenshot,
+				state: s,
 				x: cx + Math.cos(angle) * radius,
-				y: cy + Math.sin(angle) * radius
+				y: cy + Math.sin(angle) * radius,
+				angle
 			};
 		});
-		const l: LinkDatum[] = graph.transitions.map((t) => ({
-			source: t.from,
-			target: t.to,
-			label: t.label
-		}));
-		return { nodes: n, links: l };
-	}
-
-	function startSim() {
-		if (sim) {
-			sim.stop();
-			sim = null;
-		}
-		const built = build();
-		nodes = built.nodes;
-		links = built.links;
-		tick++;
-		if (nodes.length === 0) return;
-		sim = forceSimulation<NodeDatum>(nodes)
-			.force(
-				'link',
-				forceLink<NodeDatum, LinkDatum>(links)
-					.id((d) => d.id)
-					.distance(120)
-					.strength(0.4)
-			)
-			.force('charge', forceManyBody<NodeDatum>().strength(-260))
-			.force('center', forceCenter(cx, cy).strength(0.12))
-			.force('collide', forceCollide<NodeDatum>().radius(34))
-			.alpha(1)
-			.alphaDecay(0.04)
-			.velocityDecay(0.35)
-			.on('tick', () => {
-				tick++;
-			});
-	}
-
-	onDestroy(() => sim?.stop());
-
-	$effect(() => {
-		// Depend on the shape of the graph so we re-run when it changes.
-		void graph.states.length;
-		void graph.transitions.length;
-		startSim();
+		return { root: rootPos, ring };
 	});
 
-	function nodeColor(d: NodeDatum): string {
-		if (d.fails > 0) return 'var(--viz-node-bad)';
-		if (d.issues > 0) return 'var(--viz-node-warn)';
+	const positionById = $derived.by(() => {
+		const m = new Map<string, Positioned>();
+		if (layout.root) m.set(layout.root.state.id, layout.root);
+		for (const p of layout.ring) m.set(p.state.id, p);
+		return m;
+	});
+
+	function severityColor(s: InteractionState): string {
+		if (s.result.summary.fail > 0) return 'var(--viz-node-bad)';
+		if (s.result.summary.warning > 0) return 'var(--viz-node-warn)';
 		return 'var(--viz-node-ok)';
 	}
 
@@ -121,16 +72,30 @@
 		}
 	}
 
-	function linkSourceId(link: LinkDatum): string {
-		const s = link.source;
-		return typeof s === 'string' ? s : (s as NodeDatum).id;
+	// Chord endpoint trimmed to the node edge so arrows land on the stroke.
+	function trim(p: Positioned, toward: Positioned, r: number): { x: number; y: number } {
+		const dx = toward.x - p.x;
+		const dy = toward.y - p.y;
+		const len = Math.hypot(dx, dy);
+		if (len < 0.0001) return { x: p.x, y: p.y };
+		return { x: p.x + (dx / len) * r, y: p.y + (dy / len) * r };
 	}
-	function linkTargetId(link: LinkDatum): string {
-		const t = link.target;
-		return typeof t === 'string' ? t : (t as NodeDatum).id;
+
+	function labelFor(p: Positioned): string {
+		const raw = p.state.id === graph.rootId ? 'Base' : p.state.triggerLabel;
+		return raw.length > 20 ? raw.slice(0, 19) + '…' : raw;
 	}
-	function nodeById(id: string): NodeDatum | undefined {
-		return nodes.find((n) => n.id === id);
+
+	// Place the label outside the node along the radial axis so labels never
+	// overlap the node circle or each other in the common star topology.
+	function labelOffset(p: Positioned): { dx: number; dy: number; anchor: string } {
+		if (p.state.id === graph.rootId) return { dx: 0, dy: nodeR + 16, anchor: 'middle' };
+		const pad = 8;
+		const dx = Math.cos(p.angle) * (nodeR + pad);
+		const dy = Math.sin(p.angle) * (nodeR + pad) + 3;
+		const cosA = Math.cos(p.angle);
+		const anchor = Math.abs(cosA) < 0.3 ? 'middle' : cosA > 0 ? 'start' : 'end';
+		return { dx, dy, anchor };
 	}
 </script>
 
@@ -138,9 +103,18 @@
 	class="overflow-hidden rounded-md border"
 	style="border-color: var(--panel-border); background-color: var(--panel-bg-elevated);"
 >
+	<div
+		class="flex items-center justify-between border-b px-3 py-1.5 text-[9px] font-bold tracking-wide uppercase"
+		style="border-color: var(--panel-border); color: var(--panel-text-muted);"
+	>
+		<span>State graph</span>
+		<span class="tabular-nums normal-case text-[10px]" style:color="var(--panel-text-muted)">
+			{graph.states.length} state{graph.states.length === 1 ? '' : 's'} · {graph.transitions.length} transition{graph.transitions.length === 1 ? '' : 's'}
+		</span>
+	</div>
 	<svg
 		role="img"
-		aria-label="State graph showing discovered interaction states"
+		aria-label="Radial state graph: base state at center, discovered states on the ring"
 		viewBox="0 0 {width} {height}"
 		width="100%"
 		height="auto"
@@ -150,7 +124,7 @@
 			<marker
 				id="state-arrow"
 				viewBox="0 0 10 10"
-				refX="12"
+				refX="9"
 				refY="5"
 				markerWidth="5"
 				markerHeight="5"
@@ -158,91 +132,127 @@
 			>
 				<path d="M0,0 L10,5 L0,10 Z" fill="var(--viz-link)" />
 			</marker>
+			<radialGradient id="state-bg" cx="50%" cy="50%" r="60%">
+				<stop offset="0%" stop-color="color-mix(in srgb, var(--panel-primary) 6%, transparent)" />
+				<stop offset="100%" stop-color="transparent" />
+			</radialGradient>
 		</defs>
-		{#key tick}
-			<g>
-				{#each links as link, li (`${linkSourceId(link)}-${linkTargetId(link)}-${li}`)}
-					{@const src =
-						typeof link.source === 'string' ? nodeById(link.source) : (link.source as NodeDatum)}
-					{@const tgt =
-						typeof link.target === 'string' ? nodeById(link.target) : (link.target as NodeDatum)}
-					{#if src && tgt}
-						<line
-							x1={src.x ?? cx}
-							y1={src.y ?? cy}
-							x2={tgt.x ?? cx}
-							y2={tgt.y ?? cy}
-							stroke="var(--viz-link)"
-							stroke-width="1.5"
-							marker-end="url(#state-arrow)"
-						/>
-					{/if}
-				{/each}
-				{#each nodes as d (d.id)}
-					{@const isSel = selectedId === d.id}
-					<g
-						role="button"
-						tabindex="0"
-						aria-label={d.label}
-						onclick={() => onselect(d.id)}
-						onkeydown={(e) => handleKey(e, d.id)}
-						style="cursor: pointer;"
+
+		<rect x="0" y="0" width={width} height={height} fill="url(#state-bg)" />
+
+		{#if layout.root}
+			{#each [0.36, 0.18] as rf (rf)}
+				<circle
+					cx={cx}
+					cy={cy}
+					r={Math.min(width, height) * rf}
+					fill="none"
+					stroke="var(--panel-border)"
+					stroke-width="1"
+					stroke-dasharray="2 4"
+					opacity="0.5"
+				/>
+			{/each}
+
+			{#each graph.transitions as t, ti (`${t.from}-${t.to}-${ti}`)}
+				{@const src = positionById.get(t.from)}
+				{@const tgt = positionById.get(t.to)}
+				{#if src && tgt && src !== tgt}
+					{@const a = trim(src, tgt, nodeR)}
+					{@const b = trim(tgt, src, nodeR + 3)}
+					<line
+						x1={a.x}
+						y1={a.y}
+						x2={b.x}
+						y2={b.y}
+						stroke="var(--viz-link)"
+						stroke-width="1.3"
+						marker-end="url(#state-arrow)"
+						opacity={selectedId && selectedId !== t.from && selectedId !== t.to ? 0.25 : 0.9}
+					/>
+				{/if}
+			{/each}
+
+			{#each [layout.root, ...layout.ring] as p (p.state.id)}
+				{@const isSel = selectedId === p.state.id}
+				{@const isRoot = p.state.id === graph.rootId}
+				{@const r = isSel ? nodeSelR : nodeR}
+				{@const off = labelOffset(p)}
+				<g
+					role="button"
+					tabindex="0"
+					aria-label="State {p.state.id}: {p.state.triggerLabel} — {p.state.result.summary.fail} failures, {p.state.result.summary.warning} warnings"
+					aria-pressed={isSel}
+					onclick={() => onselect(p.state.id)}
+					onkeydown={(e) => handleKey(e, p.state.id)}
+					style="cursor: pointer;"
+				>
+					<circle
+						cx={p.x}
+						cy={p.y}
+						r={r + 4}
+						fill="transparent"
+						stroke={isSel ? 'var(--panel-primary)' : 'transparent'}
+						stroke-width="2"
+						opacity={isSel ? 0.6 : 0}
+					/>
+					<circle
+						cx={p.x}
+						cy={p.y}
+						r={r}
+						fill="var(--panel-bg-elevated)"
+						stroke={severityColor(p.state)}
+						stroke-width={isSel ? 3 : 2}
+					/>
+					<circle
+						cx={p.x}
+						cy={p.y}
+						r={r - 4}
+						fill={severityColor(p.state)}
+						opacity="0.22"
+					/>
+					<text
+						x={p.x}
+						y={p.y + 4}
+						fill={severityColor(p.state)}
+						font-size={isRoot ? '14' : '12'}
+						font-weight="800"
+						text-anchor="middle"
+						pointer-events="none"
 					>
-						<circle
-							cx={d.x ?? cx}
-							cy={d.y ?? cy}
-							r={isSel ? 22 : 18}
-							fill={nodeColor(d)}
-							stroke={isSel ? 'var(--panel-primary)' : 'var(--viz-surface)'}
-							stroke-width="2"
-						/>
-						<text
-							x={d.x ?? cx}
-							y={(d.y ?? cy) + 3}
-							fill="var(--viz-surface)"
-							font-size="10"
-							font-weight="700"
-							text-anchor="middle"
-							pointer-events="none"
-						>
-							{d.id === graph.rootId ? '★' : d.issues}
-						</text>
-						<text
-							x={d.x ?? cx}
-							y={(d.y ?? cy) + 34}
-							fill="var(--panel-text)"
-							font-size="9"
-							text-anchor="middle"
-							font-weight={isSel ? 700 : 500}
-							pointer-events="none"
-						>
-							{d.label.length > 18 ? d.label.slice(0, 17) + '…' : d.label}
-						</text>
-					</g>
-				{/each}
-			</g>
-		{/key}
+						{isRoot ? '★' : p.state.result.summary.fail || p.state.result.summary.total || 0}
+					</text>
+					<text
+						x={p.x + off.dx}
+						y={p.y + off.dy}
+						fill="var(--panel-text)"
+						font-size="10"
+						text-anchor={off.anchor}
+						font-weight={isSel ? 700 : 500}
+						pointer-events="none"
+					>
+						{labelFor(p)}
+					</text>
+				</g>
+			{/each}
+		{/if}
 	</svg>
 	<div
 		class="flex items-center gap-3 border-t px-3 py-1.5 text-[10px] text-[var(--panel-text-subtle)]"
 		style="border-color: var(--panel-border);"
 	>
-		<span class="flex items-center gap-1"
-			><span class="inline-block h-2 w-2 rounded-full" style="background-color: var(--viz-node-ok);"
-			></span> no issues</span
-		>
-		<span class="flex items-center gap-1"
-			><span
-				class="inline-block h-2 w-2 rounded-full"
-				style="background-color: var(--viz-node-warn);"
-			></span> warnings</span
-		>
-		<span class="flex items-center gap-1"
-			><span
-				class="inline-block h-2 w-2 rounded-full"
-				style="background-color: var(--viz-node-bad);"
-			></span> failures</span
-		>
-		<span class="ml-auto">★ base state · number = total issues</span>
+		<span class="flex items-center gap-1">
+			<span class="inline-block h-2 w-2 rounded-full" style="background-color: var(--viz-node-ok);"></span>
+			clean
+		</span>
+		<span class="flex items-center gap-1">
+			<span class="inline-block h-2 w-2 rounded-full" style="background-color: var(--viz-node-warn);"></span>
+			warnings
+		</span>
+		<span class="flex items-center gap-1">
+			<span class="inline-block h-2 w-2 rounded-full" style="background-color: var(--viz-node-bad);"></span>
+			failures
+		</span>
+		<span class="ml-auto">★ base · number = fail count</span>
 	</div>
 </div>

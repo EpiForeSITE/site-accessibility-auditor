@@ -11,10 +11,11 @@
 	import ToolbarButton from '../lib/components/ui/toolbar-button.svelte';
 	import EmptyState from '../lib/components/ui/empty-state.svelte';
 	import LoadingSkeleton from '../lib/components/ui/loading-skeleton.svelte';
-	import SplitPane from '../lib/components/ui/split-pane.svelte';
+	import SplitPane3 from '../lib/components/ui/split-pane-3.svelte';
 	import TreeFilterBar from '../lib/components/ax-tree/tree-filter-bar.svelte';
-	import SemanticTree from '../lib/components/ax-tree/semantic-tree.svelte';
 	import TreeInspector from '../lib/components/ax-tree/tree-inspector.svelte';
+	import VizNodeLink from '../lib/components/ax-tree/viz-node-link.svelte';
+	import VizPageWireframe from '../lib/components/ax-tree/viz-page-wireframe.svelte';
 
 	let scanning = $state(false);
 	let error = $state<string | null>(null);
@@ -23,9 +24,15 @@
 	let selectedPair = $state<DiffPair | null>(null);
 	let filter = $state<Set<DiffKind>>(new Set());
 	let query = $state('');
+	let followSelection = $state(true);
+	let fitVersion = $state(0);
 
 	const diff = $derived(tree ? diffTrees(tree.axNodes, tree.visualNodes) : null);
 	const built = $derived(diff ? buildDiffTree(diff) : null);
+
+	function bumpFit() {
+		fitVersion += 1;
+	}
 
 	async function handleScan() {
 		scanning = true;
@@ -37,6 +44,8 @@
 			if (tree.axNodes.length === 0 && tree.visualNodes.length === 0) {
 				error = 'No semantic structure detected.';
 				tree = null;
+			} else {
+				bumpFit();
 			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Semantic tree scan failed';
@@ -62,9 +71,19 @@
 		const path = pair.visual?.path ?? pair.ax?.path ?? null;
 		await highlightAxNode(path);
 	}
+
+	function handleFilterChange(next: Set<DiffKind>) {
+		filter = next;
+		bumpFit();
+	}
+
+	function handleQueryChange(next: string) {
+		query = next;
+		bumpFit();
+	}
 </script>
 
-<PanelShell title="Semantic Tree" subtitle="Accessibility tree vs reading order">
+<PanelShell title="Semantic Tree" subtitle="Tree + page layout">
 	{#snippet toolbar()}
 		{#if tree}
 			<ToolbarButton onclick={handleClear}>Clear</ToolbarButton>
@@ -92,25 +111,40 @@
 					{diff}
 					{filter}
 					{query}
-					onfilterchange={(next) => (filter = next)}
-					onquerychange={(next) => (query = next)}
+					{followSelection}
+					onfilterchange={handleFilterChange}
+					onquerychange={handleQueryChange}
+					onfollowchange={(next) => (followSelection = next)}
 				/>
 			</div>
 			<div class="min-h-0 flex-1">
-				<SplitPane initialRatio={0.58}>
+				<SplitPane3 initialRatios={[0.38, 0.34, 0.28]}>
 					{#snippet left()}
-						<SemanticTree
+						<VizNodeLink
 							forest={built.forest}
 							{filter}
 							{query}
 							{selectedKey}
+							{followSelection}
+							{fitVersion}
+							onselect={handleSelect}
+						/>
+					{/snippet}
+					{#snippet middle()}
+						<VizPageWireframe
+							forest={built.forest}
+							{filter}
+							{query}
+							{selectedKey}
+							{followSelection}
+							{fitVersion}
 							onselect={handleSelect}
 						/>
 					{/snippet}
 					{#snippet right()}
 						<TreeInspector pair={selectedPair} viewport={tree?.viewport ?? null} />
 					{/snippet}
-				</SplitPane>
+				</SplitPane3>
 			</div>
 		{:else if !error}
 			<EmptyState

@@ -65,8 +65,8 @@
 		return {
 			x: minX,
 			y: minY,
-			w: maxX - minX,
-			h: maxY - minY,
+			w: Math.max(1, maxX - minX),
+			h: Math.max(1, maxY - minY),
 			vpX: 0,
 			vpY: 0,
 			vpW,

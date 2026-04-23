@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { exploreStates } from '../lib/session/dynamic-explorer.ts';
 	import { computeStateDebt } from '../lib/session/state-debt.ts';
-	import type { ExplorerProgress, StateGraph } from '../lib/session/types.ts';
+	import type { ExplorerProgress, InteractionState, StateGraph } from '../lib/session/types.ts';
 	import PanelShell from '../lib/components/ui/panel-shell.svelte';
 	import ToolbarButton from '../lib/components/ui/toolbar-button.svelte';
 	import EmptyState from '../lib/components/ui/empty-state.svelte';
@@ -11,17 +11,31 @@
 	import StateDetail from '../lib/components/states/state-detail.svelte';
 	import DebtCard from '../lib/components/states/debt-card.svelte';
 
+	type ViewMode = 'graph' | 'matrix';
+
 	let graph = $state<StateGraph | null>(null);
 	let running = $state(false);
 	let error = $state<string | null>(null);
 	let budget = $state(6);
 	let selectedId = $state<string | null>(null);
 	let progress = $state<ExplorerProgress | null>(null);
+	let view = $state<ViewMode>('graph');
 	let controller: AbortController | null = null;
 
 	const debt = $derived(graph ? computeStateDebt(graph) : null);
-	const selectedState = $derived(
+
+	const baseState = $derived.by<InteractionState | null>(() => {
+		const g = graph;
+		if (!g || g.states.length === 0) return null;
+		return g.states.find((s) => s.id === g.rootId) ?? g.states[0];
+	});
+
+	const selectedState = $derived<InteractionState | null>(
 		graph && selectedId ? (graph.states.find((s) => s.id === selectedId) ?? null) : null
+	);
+
+	const progressPct = $derived(
+		progress ? Math.round((progress.candidatesProcessed / Math.max(1, progress.candidatesTotal)) * 100) : 0
 	);
 
 	async function handleRun() {
@@ -31,12 +45,13 @@
 		progress = null;
 		controller = new AbortController();
 		try {
-			graph = await exploreStates({
+			const result = await exploreStates({
 				budget,
 				signal: controller.signal,
 				onProgress: (p) => (progress = p)
 			});
-			if (graph.states.length > 0) selectedId = graph.states[0].id;
+			graph = result;
+			if (result.states.length > 0) selectedId = result.states[0].id;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Exploration failed';
 			graph = null;
@@ -65,7 +80,15 @@
 	{#snippet toolbar()}
 		<label class="flex items-center gap-1.5 text-[11px] text-[var(--panel-text-muted)]">
 			<span>Budget</span>
-			<input type="range" min="2" max="16" bind:value={budget} class="w-24" disabled={running} />
+			<input
+				type="range"
+				min="2"
+				max="16"
+				bind:value={budget}
+				class="w-24"
+				disabled={running}
+				aria-label="Exploration budget (candidate interactions)"
+			/>
 			<span class="w-6 text-right font-mono text-[var(--panel-text)]">{budget}</span>
 		</label>
 		{#if running}
@@ -85,20 +108,22 @@
 				style="border-color: var(--panel-border); background-color: var(--panel-summary-bg);"
 			>
 				<div class="flex items-center justify-between">
-					<span class="font-semibold text-[var(--panel-text)]">{progress.phase}</span>
-					<span class="text-[var(--panel-text-muted)]"
-						>{progress.candidatesProcessed}/{progress.candidatesTotal}</span
+					<span class="font-semibold capitalize text-[var(--panel-text)]">{progress.phase}</span>
+					<span class="font-mono text-[var(--panel-text-muted)]"
+						>{progress.candidatesProcessed}/{progress.candidatesTotal} · {progressPct}%</span
 					>
 				</div>
 				<div
-					class="mt-1.5 h-1 overflow-hidden rounded-full"
+					class="mt-1.5 h-1.5 overflow-hidden rounded-full"
 					style="background-color: var(--panel-hover);"
+					role="progressbar"
+					aria-valuenow={progressPct}
+					aria-valuemin="0"
+					aria-valuemax="100"
 				>
 					<span
 						class="block h-full transition-all"
-						style="background-color: var(--panel-primary); width: {Math.round(
-							(progress.candidatesProcessed / Math.max(1, progress.candidatesTotal)) * 100
-						)}%;"
+						style="background-color: var(--panel-primary); width: {progressPct}%;"
 					></span>
 				</div>
 				<div class="mt-1 text-[10px] text-[var(--panel-text-muted)]">{progress.message}</div>
@@ -109,6 +134,7 @@
 			<div
 				class="rounded-md border px-3 py-2 text-[11px]"
 				style="border-color: var(--panel-error-border); background-color: var(--panel-error-bg); color: var(--panel-error-text);"
+				role="alert"
 			>
 				{error}
 			</div>
@@ -117,15 +143,55 @@
 		{#if graph && debt}
 			<DebtCard {debt} />
 
-			<div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+			<div
+				class="flex items-center gap-0.5 rounded-md border p-0.5 text-[10px]"
+				style="border-color: var(--panel-border); background-color: var(--panel-summary-bg);"
+				role="tablist"
+				aria-label="State explorer view"
+			>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={view === 'graph'}
+					class="flex-1 rounded px-2 py-1.5 font-semibold transition-colors"
+					style:background-color={view === 'graph' ? 'var(--panel-bg-elevated)' : 'transparent'}
+					style:color={view === 'graph' ? 'var(--panel-text)' : 'var(--panel-text-muted)'}
+					onclick={() => (view = 'graph')}
+				>
+					Radial graph
+				</button>
+				<button
+					type="button"
+					role="tab"
+					aria-selected={view === 'matrix'}
+					class="flex-1 rounded px-2 py-1.5 font-semibold transition-colors"
+					style:background-color={view === 'matrix' ? 'var(--panel-bg-elevated)' : 'transparent'}
+					style:color={view === 'matrix' ? 'var(--panel-text)' : 'var(--panel-text-muted)'}
+					onclick={() => (view = 'matrix')}
+				>
+					Issue matrix
+				</button>
+			</div>
+
+			<div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
 				<div class="flex flex-col gap-3">
-					<StateGraphView {graph} {selectedId} onselect={handleSelect} />
-					<StateIssueMatrix {graph} {selectedId} onselect={handleSelect} />
+					{#if view === 'graph'}
+						<StateGraphView {graph} {selectedId} onselect={handleSelect} />
+					{:else}
+						<StateIssueMatrix {graph} {selectedId} onselect={handleSelect} />
+					{/if}
+					<StateTimeline {graph} {selectedId} onselect={handleSelect} />
 				</div>
 				<div class="flex flex-col gap-3">
-					<StateTimeline {graph} {selectedId} onselect={handleSelect} />
 					{#if selectedState}
-						<StateDetail state={selectedState} />
+						<StateDetail current={selectedState} {baseState} />
+					{:else}
+						<div
+							class="rounded-md border px-3 py-8 text-center text-[11px] text-[var(--panel-text-muted)]"
+							style="border-color: var(--panel-border); background-color: var(--panel-bg-elevated);"
+						>
+							Select a state to inspect its issues.
+						</div>
 					{/if}
 				</div>
 			</div>
@@ -141,10 +207,10 @@
 						style="border-color: var(--panel-border); background-color: var(--panel-bg-elevated);"
 					>
 						<div class="text-[9px] font-bold tracking-wide text-[var(--viz-info)] uppercase">
-							State graph
+							Radial state graph
 						</div>
 						<p class="mt-1 text-[var(--panel-text-muted)]">
-							d3-force layout · nodes colored by severity
+							base at center · severity-colored ring
 						</p>
 					</div>
 					<div
@@ -165,7 +231,7 @@
 						<div class="text-[9px] font-bold tracking-wide text-[var(--viz-warn)] uppercase">
 							Issue matrix
 						</div>
-						<p class="mt-1 text-[var(--panel-text-muted)]">state × issue class heatmap</p>
+						<p class="mt-1 text-[var(--panel-text-muted)]">state × category heatmap with Δ vs base</p>
 					</div>
 					<div
 						class="rounded-md border p-2"
@@ -175,7 +241,7 @@
 							Timeline
 						</div>
 						<p class="mt-1 text-[var(--panel-text-muted)]">
-							chronological state discovery with screenshots
+							chronological discovery · new/gone issue counts
 						</p>
 					</div>
 				</div>

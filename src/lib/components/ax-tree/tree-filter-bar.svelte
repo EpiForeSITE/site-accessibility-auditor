@@ -5,11 +5,21 @@
 		diff: AxTreeDiff;
 		filter: Set<DiffKind>;
 		query: string;
+		followSelection: boolean;
 		onfilterchange: (next: Set<DiffKind>) => void;
 		onquerychange: (next: string) => void;
+		onfollowchange: (next: boolean) => void;
 	}
 
-	let { diff, filter, query, onfilterchange, onquerychange }: Props = $props();
+	let {
+		diff,
+		filter,
+		query,
+		followSelection,
+		onfilterchange,
+		onquerychange,
+		onfollowchange
+	}: Props = $props();
 
 	const entries: { key: DiffKind; label: string; glyph: string; color: string }[] = [
 		{ key: 'match', label: 'Match', glyph: '✓', color: 'var(--viz-ok)' },
@@ -66,15 +76,38 @@
 				</span>
 			</button>
 		{/each}
-		{#if activeCount > 0 || query.length > 0}
+		<div class="ml-auto flex items-center gap-1.5">
+			{#if activeCount > 0 || query.length > 0}
+				<button
+					type="button"
+					onclick={clearFilter}
+					class="rounded px-2 py-0.5 text-[10px] text-[var(--panel-text-muted)] hover:bg-[var(--panel-hover)] hover:text-[var(--panel-text)]"
+				>
+					Clear
+				</button>
+			{/if}
 			<button
 				type="button"
-				onclick={clearFilter}
-				class="ml-auto rounded px-2 py-0.5 text-[10px] text-[var(--panel-text-muted)] hover:bg-[var(--panel-hover)] hover:text-[var(--panel-text)]"
+				onclick={() => onfollowchange(!followSelection)}
+				class="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all"
+				style:border-color={followSelection
+					? 'var(--panel-primary)'
+					: 'var(--panel-border)'}
+				style:background-color={followSelection
+					? 'color-mix(in srgb, var(--panel-primary) 18%, var(--panel-bg-elevated))'
+					: 'var(--panel-bg-elevated)'}
+				style:color={followSelection ? 'var(--panel-primary)' : 'var(--panel-text-muted)'}
+				aria-pressed={followSelection}
+				title="When on, selecting a node pans and zooms both views to it"
 			>
-				Clear
+				<span
+					class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px]"
+					style:background-color={followSelection ? 'var(--panel-primary)' : 'var(--panel-border)'}
+					style:color="white"
+				>◎</span>
+				<span class="tracking-wide uppercase">Follow selection</span>
 			</button>
-		{/if}
+		</div>
 	</div>
 
 	<div class="relative">
