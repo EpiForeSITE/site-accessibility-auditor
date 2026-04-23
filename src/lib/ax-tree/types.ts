@@ -18,9 +18,19 @@ export interface VisualNode {
 	role: string | null;
 }
 
+export interface ViewportInfo {
+	width: number;
+	height: number;
+	scrollX: number;
+	scrollY: number;
+	documentWidth: number;
+	documentHeight: number;
+}
+
 export interface AxTreeResult {
 	axNodes: AxNode[];
 	visualNodes: VisualNode[];
+	viewport: ViewportInfo;
 	timestamp: string;
 }
 
@@ -43,4 +53,18 @@ export interface DiffPair {
 export interface AxTreeDiff {
 	pairs: DiffPair[];
 	summary: Record<DiffKind, number>;
+}
+
+export interface TreeNode {
+	key: string;
+	pair: DiffPair;
+	depth: number;
+	children: TreeNode[];
+	readingOrderDelta: number | null;
+	isGhost: boolean;
+}
+
+export interface TreeBuildResult {
+	forest: TreeNode[];
+	nodesByKey: Map<string, TreeNode>;
 }

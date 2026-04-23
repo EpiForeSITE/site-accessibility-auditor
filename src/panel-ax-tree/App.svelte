@@ -5,28 +5,33 @@
 		clearAxHighlight
 	} from '../lib/ax-tree/ax-tree-extractor.ts';
 	import { diffTrees } from '../lib/ax-tree/tree-differ.ts';
-	import type { AxTreeResult, DiffPair } from '../lib/ax-tree/types.ts';
+	import { buildDiffTree } from '../lib/ax-tree/tree-builder.ts';
+	import type { AxTreeResult, DiffKind, DiffPair } from '../lib/ax-tree/types.ts';
 	import PanelShell from '../lib/components/ui/panel-shell.svelte';
 	import ToolbarButton from '../lib/components/ui/toolbar-button.svelte';
 	import EmptyState from '../lib/components/ui/empty-state.svelte';
 	import LoadingSkeleton from '../lib/components/ui/loading-skeleton.svelte';
-	import TreeDiffView from '../lib/components/ax-tree/tree-diff-view.svelte';
-	import TreeDiffSummary from '../lib/components/ax-tree/tree-diff-summary.svelte';
+	import SplitPane from '../lib/components/ui/split-pane.svelte';
+	import TreeFilterBar from '../lib/components/ax-tree/tree-filter-bar.svelte';
+	import SemanticTree from '../lib/components/ax-tree/semantic-tree.svelte';
+	import TreeInspector from '../lib/components/ax-tree/tree-inspector.svelte';
 
 	let scanning = $state(false);
 	let error = $state<string | null>(null);
 	let tree = $state<AxTreeResult | null>(null);
-	let selectedIndex = $state<number | null>(null);
+	let selectedKey = $state<string | null>(null);
+	let selectedPair = $state<DiffPair | null>(null);
+	let filter = $state<Set<DiffKind>>(new Set());
+	let query = $state('');
 
 	const diff = $derived(tree ? diffTrees(tree.axNodes, tree.visualNodes) : null);
-	const selectedPair = $derived(
-		diff && selectedIndex !== null ? (diff.pairs[selectedIndex] ?? null) : null
-	);
+	const built = $derived(diff ? buildDiffTree(diff) : null);
 
 	async function handleScan() {
 		scanning = true;
 		error = null;
-		selectedIndex = null;
+		selectedKey = null;
+		selectedPair = null;
 		try {
 			tree = await extractAxTree();
 			if (tree.axNodes.length === 0 && tree.visualNodes.length === 0) {
@@ -44,18 +49,22 @@
 	async function handleClear() {
 		await clearAxHighlight();
 		tree = null;
-		selectedIndex = null;
+		selectedKey = null;
+		selectedPair = null;
 		error = null;
+		filter = new Set();
+		query = '';
 	}
 
-	async function handleSelect(pair: DiffPair, index: number) {
-		selectedIndex = index;
+	async function handleSelect(pair: DiffPair, key: string) {
+		selectedKey = key;
+		selectedPair = pair;
 		const path = pair.visual?.path ?? pair.ax?.path ?? null;
 		await highlightAxNode(path);
 	}
 </script>
 
-<PanelShell title="Semantic Tree" subtitle="AX ↔ visual tree diff">
+<PanelShell title="Semantic Tree" subtitle="Accessibility tree vs reading order">
 	{#snippet toolbar()}
 		{#if tree}
 			<ToolbarButton onclick={handleClear}>Clear</ToolbarButton>
@@ -65,10 +74,10 @@
 		</ToolbarButton>
 	{/snippet}
 
-	<div class="flex flex-col gap-3 px-3 py-3">
+	<div class="flex h-full min-h-0 flex-col gap-2 px-3 py-3">
 		{#if error}
 			<div
-				class="rounded-md border px-3 py-2 text-[11px]"
+				class="shrink-0 rounded-md border px-3 py-2 text-[11px]"
 				style="border-color: var(--panel-error-border); background-color: var(--panel-error-bg); color: var(--panel-error-text);"
 			>
 				{error}
@@ -77,63 +86,32 @@
 
 		{#if scanning}
 			<LoadingSkeleton rows={5} label="Walking the accessibility and visual trees…" />
-		{:else if tree && diff}
-			<TreeDiffSummary {diff} />
-			<TreeDiffView {diff} {selectedIndex} onselect={handleSelect} />
-			{#if selectedPair}
-				<div
-					class="rounded-md border p-3 text-[11px]"
-					style="border-color: var(--panel-primary); background-color: var(--panel-selected);"
-				>
-					<div
-						class="mb-1.5 text-[9px] font-bold tracking-wide text-[var(--panel-text-muted)] uppercase"
-					>
-						Pair inspector · {selectedPair.kind}
-					</div>
-					<div class="grid grid-cols-2 gap-3">
-						<div>
-							<div class="text-[9px] tracking-wide text-[var(--panel-text-muted)] uppercase">
-								Visual
-							</div>
-							{#if selectedPair.visual}
-								<div class="text-[var(--panel-text)]">
-									<code
-										class="rounded px-1 text-[10px]"
-										style="background-color: var(--panel-code-bg); color: var(--panel-text);"
-										>&lt;{selectedPair.visual.tag}&gt;</code
-									>
-									<span class="ml-1">{selectedPair.visual.text || '(no text)'}</span>
-								</div>
-								<p class="mt-1 font-mono text-[10px] text-[var(--panel-text-subtle)]">
-									{selectedPair.visual.path}
-								</p>
-							{:else}
-								<p class="text-[var(--panel-text-subtle)]">Not present in visual order.</p>
-							{/if}
-						</div>
-						<div>
-							<div class="text-[9px] tracking-wide text-[var(--panel-text-muted)] uppercase">
-								AX tree
-							</div>
-							{#if selectedPair.ax}
-								<div class="text-[var(--panel-text)]">
-									<span
-										class="rounded px-1 text-[9px] font-bold tracking-wide uppercase"
-										style="background-color: color-mix(in srgb, var(--viz-accent) 12%, transparent); color: var(--viz-accent);"
-										>{selectedPair.ax.role}</span
-									>
-									<span class="ml-1">{selectedPair.ax.name || '(no accessible name)'}</span>
-								</div>
-								<p class="mt-1 font-mono text-[10px] text-[var(--panel-text-subtle)]">
-									{selectedPair.ax.path}
-								</p>
-							{:else}
-								<p class="text-[var(--panel-text-subtle)]">Not present in accessibility tree.</p>
-							{/if}
-						</div>
-					</div>
-				</div>
-			{/if}
+		{:else if tree && diff && built}
+			<div class="shrink-0">
+				<TreeFilterBar
+					{diff}
+					{filter}
+					{query}
+					onfilterchange={(next) => (filter = next)}
+					onquerychange={(next) => (query = next)}
+				/>
+			</div>
+			<div class="min-h-0 flex-1">
+				<SplitPane initialRatio={0.58}>
+					{#snippet left()}
+						<SemanticTree
+							forest={built.forest}
+							{filter}
+							{query}
+							{selectedKey}
+							onselect={handleSelect}
+						/>
+					{/snippet}
+					{#snippet right()}
+						<TreeInspector pair={selectedPair} viewport={tree?.viewport ?? null} />
+					{/snippet}
+				</SplitPane>
+			</div>
 		{:else if !error}
 			<EmptyState
 				title="Semantic tree diff"

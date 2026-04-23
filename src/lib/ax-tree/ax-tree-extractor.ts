@@ -1,5 +1,5 @@
 import { evalInPage } from '../shared/devtools-eval.ts';
-import type { AxNode, AxTreeResult, VisualNode } from './types.ts';
+import type { AxNode, AxTreeResult, ViewportInfo, VisualNode } from './types.ts';
 
 export async function extractAxTree(): Promise<AxTreeResult> {
 	const expr = `(function() {
@@ -157,13 +157,28 @@ export async function extractAxTree(): Promise<AxTreeResult> {
 
 		walk(document.body, 0, null);
 
-		return { axNodes: axNodes, visualNodes: visualNodes };
+		var de = document.documentElement;
+		var viewport = {
+			width: window.innerWidth,
+			height: window.innerHeight,
+			scrollX: window.scrollX || window.pageXOffset || 0,
+			scrollY: window.scrollY || window.pageYOffset || 0,
+			documentWidth: Math.max(de.scrollWidth, de.clientWidth, document.body ? document.body.scrollWidth : 0),
+			documentHeight: Math.max(de.scrollHeight, de.clientHeight, document.body ? document.body.scrollHeight : 0)
+		};
+
+		return { axNodes: axNodes, visualNodes: visualNodes, viewport: viewport };
 	})()`;
 
-	const raw = await evalInPage<{ axNodes: AxNode[]; visualNodes: VisualNode[] }>(expr);
+	const raw = await evalInPage<{
+		axNodes: AxNode[];
+		visualNodes: VisualNode[];
+		viewport: ViewportInfo;
+	}>(expr);
 	return {
 		axNodes: raw.axNodes,
 		visualNodes: raw.visualNodes,
+		viewport: raw.viewport,
 		timestamp: new Date().toISOString()
 	};
 }
