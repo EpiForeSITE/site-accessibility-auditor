@@ -44,10 +44,10 @@
 	let totalWarnings = $derived(sectionWarnings.reduce((sum, w) => sum + w.length, 0));
 </script>
 
-<div class="flex h-full flex-col overflow-hidden">
+<div class="flex flex-col">
 	<!-- Summary bar -->
 	<div
-		class="border-b px-4 py-3"
+		class="rounded-lg border px-4 py-3"
 		style="border-color: var(--panel-border); background-color: var(--panel-summary-bg);"
 	>
 		<div class="flex items-center gap-4">
@@ -133,10 +133,16 @@
 	</div>
 
 	<!-- Section list -->
-	<div class="min-h-0 flex-1 overflow-y-auto">
+	<div
+		class="mt-2 overflow-hidden rounded-lg border"
+		style="border-color: var(--panel-border);"
+	>
 		{#each result.sections as section, i (i)}
 			{@const warnings = sectionWarnings[i]}
-			<div class="border-b" style="border-color: var(--panel-border);">
+			<div
+				class="border-b last:border-b-0"
+				style="border-color: var(--panel-border);"
+			>
 				<!-- Section header -->
 				<button
 					onclick={() => toggleSection(i)}

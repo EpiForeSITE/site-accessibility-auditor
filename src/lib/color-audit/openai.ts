@@ -5,65 +5,78 @@ import type {
 	ColorSection,
 	DomColorData
 } from './types.ts';
+import { callResponsesJson, OPENAI_MODEL } from '../shared/openai-client.ts';
 
-const API_URL = 'https://api.openai.com/v1/responses';
-const MODEL = 'gpt-5.2-pro';
+const USAGE_VALUES = [
+	'background',
+	'text',
+	'border',
+	'fill',
+	'stroke',
+	'outline',
+	'other'
+] as const;
+
+const SEVERITY_VALUES = ['critical', 'high', 'medium', 'low', 'info'] as const;
+
+const COLOR_AUDIT_SCHEMA = {
+	type: 'object',
+	additionalProperties: false,
+	required: ['sections', 'findings'],
+	properties: {
+		sections: {
+			type: 'array',
+			items: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['name', 'description', 'colors'],
+				properties: {
+					name: { type: 'string' },
+					description: { type: 'string' },
+					colors: {
+						type: 'array',
+						items: {
+							type: 'object',
+							additionalProperties: false,
+							required: ['hex', 'usage', 'element', 'context'],
+							properties: {
+								hex: { type: 'string', description: 'Lowercase hex color like #aabbcc' },
+								usage: { type: 'string', enum: USAGE_VALUES as unknown as string[] },
+								element: {
+									type: 'string',
+									description: 'Short DOM selector or tag describing where the color appears'
+								},
+								context: {
+									type: 'string',
+									description: 'One-line human-readable role the color plays in the UI'
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		findings: {
+			type: 'array',
+			items: {
+				type: 'object',
+				additionalProperties: false,
+				required: ['title', 'severity', 'wcag', 'summary', 'fix_hint', 'affected_colors'],
+				properties: {
+					title: { type: 'string' },
+					severity: { type: 'string', enum: SEVERITY_VALUES as unknown as string[] },
+					wcag: { type: 'string' },
+					summary: { type: 'string' },
+					fix_hint: { type: 'string' },
+					affected_colors: { type: 'array', items: { type: 'string' } }
+				}
+			}
+		}
+	}
+} as const;
 
 function validateColorEntry(entry: Partial<ColorEntry>): entry is ColorEntry {
 	return Boolean(entry.hex && entry.usage && entry.element && entry.context);
-}
-
-function parseOutputText(data: unknown): string {
-	const response = data as {
-		output?: Array<{
-			type?: string;
-			role?: string;
-			content?: Array<{ type?: string; text?: string }>;
-		}>;
-		output_text?: string;
-	};
-
-	const outputMessage =
-		response.output?.find((item) => item.type === 'message' && item.role === 'assistant') ??
-		response.output?.find((item) => item.type === 'message');
-	const textBlock = outputMessage?.content?.find((block) => block.type === 'output_text');
-	const content = textBlock?.text ?? response.output_text;
-
-	if (!content) {
-		throw new Error('Empty response from OpenAI');
-	}
-
-	return content
-		.replace(/^```(?:json)?\s*\n?/i, '')
-		.replace(/\n?```\s*$/i, '')
-		.trim();
-}
-
-async function requestJson<T>(apiKey: string, instructions: string, input: string): Promise<T> {
-	const response = await fetch(API_URL, {
-		method: 'POST',
-		headers: {
-			'Content-Type': 'application/json',
-			Authorization: `Bearer ${apiKey}`
-		},
-		body: JSON.stringify({
-			model: MODEL,
-			instructions,
-			input,
-			reasoning: { effort: 'medium' }
-		})
-	});
-
-	if (!response.ok) {
-		const err = await response.json().catch(() => null);
-		const msg =
-			(err as { error?: { message?: string } } | null)?.error?.message ??
-			`API request failed (${response.status})`;
-		throw new Error(msg);
-	}
-
-	const data = await response.json();
-	return JSON.parse(parseOutputText(data)) as T;
 }
 
 function normalizeColorSections(sections: Array<Partial<ColorSection>>): ColorSection[] {
@@ -102,41 +115,41 @@ export async function extractColorSections(
 	apiKey: string,
 	domData: DomColorData
 ): Promise<ColorAuditResult> {
-	const instructions = `You are an expert accessibility auditor for websites. You will receive DOM color extraction data.
+	const instructions = `You are an expert accessibility auditor. You receive DOM color extraction data.
 
-Return JSON with two keys: "sections" and "findings".
-- "sections" groups colors into human-readable semantic sections from top to bottom.
-- "findings" contains accessibility-relevant color findings only, not generic design commentary.
+Group colors into human-readable semantic sections ordered top-to-bottom.
 
-For each finding include:
-- "title"
-- "severity": one of critical/high/medium/low/info
-- "wcag"
-- "summary"
-- "fix_hint"
-- "affected_colors": array of hex colors
+Each section MUST contain:
+- "name": short human label (e.g. "Top navigation", "Primary card surface").
+- "description": one-line summary of where these colors appear.
+- "colors": one entry per distinct color occurrence with these fields:
+    - "hex": lowercase hex like "#aabbcc".
+    - "usage": one of background | text | border | fill | stroke | outline | other.
+    - "element": short DOM selector or tag (e.g. "nav.navbar", "button.primary", "svg rect").
+    - "context": one-line description of the role this color plays (e.g. "Active tab underline", "Card header text").
 
-Allowed finding topics:
+Findings are accessibility issues only (no generic design commentary). Allowed topics:
 - likely low contrast clusters
 - color-only meaning in charts, legends, or status indicators
 - visually confusable palette groups
 - insufficient distinction between interactive states
 
-Respond with JSON only.`;
+For each finding include title, severity (critical/high/medium/low/info), wcag, summary, fix_hint, and affected_colors (array of hex).`;
 
-	const parsed = await requestJson<{
+	const parsed = await callResponsesJson<{
 		sections?: Array<Partial<ColorSection>>;
 		findings?: Array<Partial<ColorFinding>>;
-	}>(
-		apiKey,
+	}>(apiKey, {
 		instructions,
-		`Page: ${domData.pageTitle} (${domData.url})\nDOM color data:\n${JSON.stringify(domData.elements)}`
-	);
+		text: `Page: ${domData.pageTitle} (${domData.url})\nDOM color data:\n${JSON.stringify(domData.elements)}`,
+		schemaName: 'color_audit',
+		schema: COLOR_AUDIT_SCHEMA as unknown as Record<string, unknown>
+	});
 
 	return {
 		sections: normalizeColorSections(parsed.sections ?? []),
 		findings: normalizeColorFindings(parsed.findings ?? []),
-		modelVersion: MODEL,
+		modelVersion: OPENAI_MODEL,
 		pageUrl: domData.url,
 		timestamp: new Date().toISOString()
 	};

@@ -1,4 +1,5 @@
 import type { TabOrderElement, TabOrderResult } from './types.ts';
+import { evalInPage } from '../shared/devtools-eval.ts';
 
 function buildScanExpression(): string {
 	return `(function() {
@@ -395,18 +396,6 @@ function buildHighlightExpression(id: number | null): string {
 			: ''
 	}
 })()`;
-}
-
-function evalInPage(expression: string): Promise<unknown> {
-	return new Promise((resolve, reject) => {
-		chrome.devtools.inspectedWindow.eval(expression, {}, (result, exInfo) => {
-			if (exInfo?.isException) {
-				reject(new Error(exInfo.value || 'Evaluation failed'));
-			} else {
-				resolve(result);
-			}
-		});
-	});
 }
 
 interface RawElement {

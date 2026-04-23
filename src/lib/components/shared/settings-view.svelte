@@ -1,12 +1,22 @@
 <script lang="ts">
-	import { getApiKey, setApiKey, clearApiKey, maskApiKey } from '../../color-audit/api-key.ts';
+	import {
+		getApiKey,
+		setApiKey,
+		clearApiKey,
+		maskApiKey
+	} from '../../shared/openai-key.ts';
 
 	interface Props {
 		onback: () => void;
 		oncleared: () => void;
+		description?: string;
 	}
 
-	let { onback, oncleared }: Props = $props();
+	let {
+		onback,
+		oncleared,
+		description = 'Used by the Color Audit and Data Visualization panels to analyze pages with GPT-5.2-pro.'
+	}: Props = $props();
 
 	let maskedKey = $state('');
 	let newKey = $state('');
@@ -57,7 +67,6 @@
 </script>
 
 <div class="flex h-full flex-col bg-[var(--panel-bg)] text-sm">
-	<!-- Header -->
 	<header
 		class="flex shrink-0 items-center gap-2 border-b border-[var(--panel-border)] bg-[var(--panel-bg-elevated)] px-3 py-2"
 	>
@@ -73,7 +82,6 @@
 		<h1 class="text-sm font-semibold text-[var(--panel-text)]">Settings</h1>
 	</header>
 
-	<!-- Content -->
 	<div class="min-h-0 flex-1 overflow-y-auto p-4">
 		{#if success}
 			<div
@@ -99,10 +107,9 @@
 		>
 			<h2 class="mb-1 text-sm font-semibold text-[var(--panel-text)]">OpenAI API Key</h2>
 			<p class="mb-4 text-xs text-[var(--panel-text-muted)]">
-				Used by the Color Audit panel to analyze page colors with GPT-5.2-pro.
+				{description}
 			</p>
 
-			<!-- Current key display -->
 			<div class="mb-4">
 				<div class="mb-1 text-xs font-medium text-[var(--panel-text-subtle)]">Current Key</div>
 				<div
@@ -114,7 +121,6 @@
 			</div>
 
 			{#if editing}
-				<!-- Edit form -->
 				<div class="mb-4">
 					<label
 						class="mb-1 block text-xs font-medium text-[var(--panel-text-subtle)]"
@@ -191,7 +197,6 @@
 					</button>
 				</div>
 			{:else}
-				<!-- Action buttons -->
 				<div class="flex gap-2">
 					<button
 						onclick={() => (editing = true)}
@@ -210,14 +215,13 @@
 			{/if}
 		</div>
 
-		<!-- Info -->
 		<div class="mt-4 px-1">
 			<p class="text-[10px] leading-relaxed text-[var(--panel-text-subtle)]">
 				Your API key is stored locally using <code
 					class="rounded px-1 py-0.5"
 					style="background-color: var(--panel-code-bg);">chrome.storage.local</code
 				>
-				and is only sent to OpenAI's API for color analysis. It is never shared with any other service.
+				and is only sent to OpenAI's API. It is never shared with any other service.
 			</p>
 		</div>
 	</div>

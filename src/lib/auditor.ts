@@ -1,150 +1,55 @@
+import type { AuditIssue, AuditResult, AuditStatus, AuditSummary, WcagSC } from './types.ts';
+import { ALL_CRITERIA, CRITERION_META, emptySummary, summarize } from './types.ts';
+import { chromeStorageSession, type HelpSignature, type SessionStore } from './session-store.ts';
+import type { RawFinding } from './audit-checks/shared.ts';
 import {
-	INTERACTIVE_SELECTORS,
-	TOUCH_TARGET_MINIMUM,
-	TOUCH_TARGET_RECOMMENDED
-} from './constants.ts';
-import type { AuditElement, AuditResult } from './types.ts';
+	buildTargetSizeCheck,
+	classifyTargetBatch,
+	type TargetSizePageResult
+} from './audit-checks/target-size.ts';
+import {
+	buildFocusOcclusionCheck,
+	classifyOcclusion,
+	type FocusOcclusionPageResult
+} from './audit-checks/focus-occlusion.ts';
+import {
+	buildDragAlternativeCheck,
+	classifyDrag,
+	type DragPageResult
+} from './audit-checks/drag-alternative.ts';
+import {
+	buildRedundantEntryCheck,
+	classifyRedundantEntry,
+	type RedundantEntryPageResult
+} from './audit-checks/redundant-entry.ts';
+import {
+	buildAccessibleAuthCheck,
+	classifyAuth,
+	type AccessibleAuthPageResult
+} from './audit-checks/accessible-auth.ts';
+import {
+	buildConsistentHelpCheck,
+	classifyConsistentHelp,
+	type ConsistentHelpPageResult
+} from './audit-checks/consistent-help.ts';
+import {
+	buildFocusVisibleCheck,
+	classifyFocusVisible,
+	type FocusVisiblePageResult
+} from './audit-checks/focus-visible.ts';
+import { evalInPage, getPageInfo } from './shared/devtools-eval.ts';
 
-interface RawElement {
-	tag: string;
-	text: string;
-	rect: { x: number; y: number; width: number; height: number };
-	selector: string | null;
-	domPath: string | null;
-	attributes: Record<string, string | null>;
-	status: 'pass' | 'warning' | 'fail';
+interface PageInfo {
+	origin: string;
+	url: string;
+	__error?: string;
 }
 
-function buildSuggestion(el: RawElement): string {
-	const { width, height } = el.rect;
-
-	if (el.status === 'pass') {
-		return `Touch target is ${Math.round(width)}\u00d7${Math.round(height)}px \u2014 meets the recommended 44\u00d744px.`;
+function checkPageError<T extends { __error?: string }>(result: T, label: string): T {
+	if (result?.__error) {
+		throw new Error(`${label}: ${result.__error}`);
 	}
-
-	if (el.status === 'warning') {
-		const parts: string[] = [];
-		if (width < TOUCH_TARGET_RECOMMENDED)
-			parts.push(`width from ${Math.round(width)}px to ${TOUCH_TARGET_RECOMMENDED}px`);
-		if (height < TOUCH_TARGET_RECOMMENDED)
-			parts.push(`height from ${Math.round(height)}px to ${TOUCH_TARGET_RECOMMENDED}px`);
-		return `Touch target is ${Math.round(width)}\u00d7${Math.round(height)}px \u2014 meets the 24px minimum but consider increasing ${parts.join(' and ')} to reach the recommended 44\u00d744px.`;
-	}
-
-	const parts: string[] = [];
-	if (width < TOUCH_TARGET_MINIMUM)
-		parts.push(`width from ${Math.round(width)}px to at least ${TOUCH_TARGET_MINIMUM}px`);
-	if (height < TOUCH_TARGET_MINIMUM)
-		parts.push(`height from ${Math.round(height)}px to at least ${TOUCH_TARGET_MINIMUM}px`);
-	return `Touch target is ${Math.round(width)}\u00d7${Math.round(height)}px \u2014 fails the WCAG 24px minimum. Increase ${parts.join(' and ')}.`;
-}
-
-function toAuditElement(el: RawElement, index: number): AuditElement {
-	return {
-		id: index,
-		tag: el.tag,
-		text: el.text,
-		rect: el.rect,
-		selector: el.selector,
-		domPath: el.domPath,
-		attributes: el.attributes,
-		status: el.status,
-		touchWidth: Math.round(el.rect.width),
-		touchHeight: Math.round(el.rect.height),
-		suggestion: buildSuggestion(el)
-	};
-}
-
-/**
- * Code string evaluated inside the inspected page.
- * Returns a JSON-serializable array of raw element data.
- */
-function buildAuditExpression(): string {
-	return `(function() {
-	var SELECTOR = ${JSON.stringify(INTERACTIVE_SELECTORS)};
-	var MIN = ${TOUCH_TARGET_MINIMUM};
-	var REC = ${TOUCH_TARGET_RECOMMENDED};
-
-	function cssEscape(value) {
-		if (window.CSS && window.CSS.escape) return window.CSS.escape(value);
-		return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\\\$&');
-	}
-
-	function getPath(el) {
-		var parts = [];
-		var cur = el;
-		while (cur && cur !== document.body && parts.length < 6) {
-			var tag = cur.tagName.toLowerCase();
-			var nth = 1;
-			var sib = cur;
-			while ((sib = sib.previousElementSibling)) {
-				if (sib.tagName === cur.tagName) nth++;
-			}
-			parts.unshift(tag + ':nth-of-type(' + nth + ')');
-			cur = cur.parentElement;
-		}
-		return parts.join(' > ');
-	}
-
-	function getSelector(el) {
-		if (el.id) return '#' + cssEscape(el.id);
-		var aria = el.getAttribute('aria-label');
-		if (aria) return el.tagName.toLowerCase() + '[aria-label="' + aria.replace(/"/g, '\\"') + '"]';
-		var name = el.getAttribute('name');
-		if (name) return el.tagName.toLowerCase() + '[name="' + name.replace(/"/g, '\\"') + '"]';
-		return getPath(el);
-	}
-
-	document.querySelectorAll('[data-audit-id]').forEach(function(el) {
-		el.removeAttribute('data-audit-id');
-		el.removeAttribute('data-audit-status');
-		el.removeAttribute('data-audit-w');
-		el.removeAttribute('data-audit-h');
-	});
-
-	var els = document.querySelectorAll(SELECTOR);
-	var results = [];
-
-	for (var i = 0; i < els.length; i++) {
-		var el = els[i];
-		var rect = el.getBoundingClientRect();
-		if (rect.width <= 0 || rect.height <= 0) continue;
-
-		var id = results.length;
-		var status =
-			rect.width >= REC && rect.height >= REC ? 'pass'
-			: rect.width >= MIN && rect.height >= MIN ? 'warning'
-			: 'fail';
-
-		el.setAttribute('data-audit-id', String(id));
-		el.setAttribute('data-audit-status', status);
-		el.setAttribute('data-audit-w', String(Math.round(rect.width)));
-		el.setAttribute('data-audit-h', String(Math.round(rect.height)));
-
-		var text = (el.innerText || el.textContent || '').trim().substring(0, 80);
-
-		results.push({
-			tag: el.tagName.toLowerCase(),
-			text: text,
-			rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-			selector: getSelector(el),
-			domPath: getPath(el),
-			attributes: {
-				id: el.id || null,
-				class: el.className && typeof el.className === 'string' ? el.className : null,
-				role: el.getAttribute('role'),
-				type: el.getAttribute('type'),
-				href: el.getAttribute('href'),
-				'aria-label': el.getAttribute('aria-label'),
-				name: el.getAttribute('name'),
-				placeholder: el.getAttribute('placeholder')
-			},
-			status: status
-		});
-	}
-
-	return results;
-})()`;
+	return result;
 }
 
 const OVERLAY_CSS = `
@@ -160,9 +65,11 @@ const OVERLAY_CSS = `
   outline: 2px solid rgba(34, 197, 94, 0.75) !important;
   outline-offset: 1px !important;
 }
-[data-audit-status] {
-  cursor: pointer !important;
+[data-audit-status="exempt"] {
+  outline: 2px dashed rgba(148, 163, 184, 0.8) !important;
+  outline-offset: 1px !important;
 }
+[data-audit-id] { cursor: pointer !important; }
 .audit-active-highlight {
   outline-width: 4px !important;
   outline-offset: 3px !important;
@@ -178,81 +85,216 @@ const OVERLAY_CSS = `
 
 function buildInjectOverlayExpression(): string {
 	return `(function() {
-	if (document.getElementById('audit-overlay-css')) return;
-	var style = document.createElement('style');
-	style.id = 'audit-overlay-css';
-	style.textContent = ${JSON.stringify(OVERLAY_CSS)};
-	document.head.appendChild(style);
+  if (document.getElementById('audit-overlay-css')) return;
+  var style = document.createElement('style');
+  style.id = 'audit-overlay-css';
+  style.textContent = ${JSON.stringify(OVERLAY_CSS)};
+  document.head.appendChild(style);
 })()`;
 }
 
 function buildRemoveOverlayExpression(): string {
 	return `(function() {
-	var style = document.getElementById('audit-overlay-css');
-	if (style) style.remove();
-	document.querySelectorAll('[data-audit-id]').forEach(function(el) {
-		el.removeAttribute('data-audit-id');
-		el.removeAttribute('data-audit-status');
-		el.removeAttribute('data-audit-w');
-		el.removeAttribute('data-audit-h');
-	});
-	document.querySelectorAll('.audit-active-highlight').forEach(function(el) {
-		el.classList.remove('audit-active-highlight');
-	});
+  var style = document.getElementById('audit-overlay-css');
+  if (style) style.remove();
+  document.querySelectorAll('[data-audit-id]').forEach(function(el) {
+    el.removeAttribute('data-audit-id');
+    el.removeAttribute('data-audit-status');
+    el.removeAttribute('data-audit-wcag');
+  });
+  document.querySelectorAll('.audit-active-highlight').forEach(function(el) {
+    el.classList.remove('audit-active-highlight');
+  });
+})()`;
+}
+
+function buildApplyTagsExpression(issues: AuditIssue[]): string {
+	const tagPayload = issues
+		.filter((i) => i.selector)
+		.map((i) => ({
+			id: i.id,
+			selector: i.selector,
+			status: i.status,
+			wcag: i.wcag
+		}));
+	return `(function(){
+  var tags = ${JSON.stringify(tagPayload)};
+  document.querySelectorAll('[data-audit-id]').forEach(function(el){
+    el.removeAttribute('data-audit-id');
+    el.removeAttribute('data-audit-status');
+    el.removeAttribute('data-audit-wcag');
+  });
+  for (var i = 0; i < tags.length; i++) {
+    var t = tags[i];
+    try {
+      var target = document.querySelector(t.selector);
+      if (target) {
+        target.setAttribute('data-audit-id', String(t.id));
+        target.setAttribute('data-audit-status', t.status);
+        target.setAttribute('data-audit-wcag', t.wcag);
+      }
+    } catch (e) {}
+  }
 })()`;
 }
 
 function buildHighlightExpression(id: number | null): string {
 	return `(function() {
-	document.querySelectorAll('.audit-active-highlight').forEach(function(el) {
-		el.classList.remove('audit-active-highlight');
-	});
-	${
+  document.querySelectorAll('.audit-active-highlight').forEach(function(el) {
+    el.classList.remove('audit-active-highlight');
+  });
+  ${
 		id !== null
 			? `var target = document.querySelector('[data-audit-id="${id}"]');
-	if (target) {
-		target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-		target.classList.add('audit-active-highlight');
-	}`
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.add('audit-active-highlight');
+  }`
 			: ''
 	}
 })()`;
 }
 
-function evalInPage(expression: string): Promise<unknown> {
-	return new Promise((resolve, reject) => {
-		chrome.devtools.inspectedWindow.eval(expression, {}, (result, exInfo) => {
-			if (exInfo?.isException) {
-				reject(new Error(exInfo.value || 'Evaluation failed'));
-			} else {
-				resolve(result);
-			}
-		});
-	});
+function toIssues(findings: RawFinding[], startId = 0): AuditIssue[] {
+	return findings.map((f, i) => ({
+		id: startId + i,
+		wcag: f.wcag as WcagSC,
+		category: CRITERION_META[f.wcag as WcagSC]?.category ?? 'target-size',
+		status: f.status as AuditStatus,
+		tag: f.tag,
+		text: f.text,
+		rect: f.rect,
+		selector: f.selector,
+		domPath: f.domPath,
+		attributes: f.attributes,
+		evidence: f.evidence,
+		suggestion: f.suggestion
+	}));
 }
 
-export async function runAudit(): Promise<AuditResult> {
-	const rawElements = (await evalInPage(buildAuditExpression())) as RawElement[];
-	await evalInPage(buildInjectOverlayExpression());
+function computePerCriterion(issues: AuditIssue[]): Partial<Record<WcagSC, AuditSummary>> {
+	const out: Partial<Record<WcagSC, AuditSummary>> = {};
+	for (const i of issues) {
+		const bucket = out[i.wcag] ?? emptySummary();
+		bucket.total++;
+		bucket[i.status]++;
+		out[i.wcag] = bucket;
+	}
+	return out;
+}
 
-	const elements = rawElements.map((el, i) => toAuditElement(el, i));
+export interface RunAuditOptions {
+	criteria?: WcagSC[];
+	sessionStore?: SessionStore;
+}
+
+export async function runAudit(opts: RunAuditOptions = {}): Promise<AuditResult> {
+	const criteria = new Set<WcagSC>(opts.criteria ?? ALL_CRITERIA);
+	const store = opts.sessionStore ?? chromeStorageSession;
+
+	const info = await getPageInfo();
+	const findings: RawFinding[] = [];
+
+	if (criteria.has('2.5.8')) {
+		const res = await evalInPage<TargetSizePageResult>(buildTargetSizeCheck());
+		checkPageError(res, 'target-size');
+		findings.push(...classifyTargetBatch(res.raws));
+	}
+
+	if (criteria.has('2.4.11') || criteria.has('2.4.12')) {
+		const res = await evalInPage<FocusOcclusionPageResult>(buildFocusOcclusionCheck());
+		checkPageError(res, 'focus-occlusion');
+		for (const raw of res.raws) {
+			const out = classifyOcclusion(raw);
+			for (const f of out) {
+				if (!criteria.has(f.wcag as WcagSC)) continue;
+				findings.push(f);
+			}
+		}
+	}
+
+	if (criteria.has('2.5.7')) {
+		const res = await evalInPage<DragPageResult>(buildDragAlternativeCheck());
+		checkPageError(res, 'drag-alternative');
+		for (const raw of res.raws) {
+			findings.push(classifyDrag(raw));
+		}
+	}
+
+	if (criteria.has('3.3.7')) {
+		const res = await evalInPage<RedundantEntryPageResult>(buildRedundantEntryCheck());
+		checkPageError(res, 'redundant-entry');
+		const known = await store.getKnownFieldTokens(info.origin);
+		const { findings: feFindings, emittedTokens } = classifyRedundantEntry({
+			fields: res.fields,
+			knownTokens: known
+		});
+		findings.push(...feFindings);
+		if (emittedTokens.length > 0) {
+			await store.recordFieldTokens(info.origin, emittedTokens);
+		}
+	}
+
+	if (criteria.has('3.3.8')) {
+		const res = await evalInPage<AccessibleAuthPageResult>(buildAccessibleAuthCheck());
+		checkPageError(res, 'accessible-auth');
+		for (const raw of res.raws) {
+			findings.push(...classifyAuth(raw));
+		}
+	}
+
+	if (criteria.has('3.2.6')) {
+		const res = await evalInPage<ConsistentHelpPageResult>(buildConsistentHelpCheck());
+		checkPageError(res, 'consistent-help');
+		const current: HelpSignature = {
+			url: res.url,
+			timestamp: new Date().toISOString(),
+			mechanisms: res.mechanisms
+		};
+		const prior = await store.getHelpSignatures(info.origin);
+		const { findings: helpFindings, shouldRecord } = classifyConsistentHelp(current, prior);
+		findings.push(...helpFindings);
+		if (shouldRecord) await store.appendHelpSignature(info.origin, current);
+	}
+
+	if (criteria.has('2.4.7') || criteria.has('1.4.11')) {
+		const res = await evalInPage<FocusVisiblePageResult>(buildFocusVisibleCheck());
+		checkPageError(res, 'focus-visible');
+		for (const raw of res.raws) {
+			const out = classifyFocusVisible(raw);
+			for (const f of out) {
+				if (!criteria.has(f.wcag as WcagSC)) continue;
+				findings.push(f);
+			}
+		}
+	}
+
+	const issues = toIssues(findings);
+	const summary = summarize(issues);
+	const perCriterion = computePerCriterion(issues);
+
+	await evalInPage(buildInjectOverlayExpression());
+	await evalInPage(buildApplyTagsExpression(issues));
 
 	return {
-		elements,
-		summary: {
-			total: elements.length,
-			pass: elements.filter((e) => e.status === 'pass').length,
-			warning: elements.filter((e) => e.status === 'warning').length,
-			fail: elements.filter((e) => e.status === 'fail').length
-		},
-		timestamp: new Date().toISOString()
+		issues,
+		summary,
+		perCriterion,
+		timestamp: new Date().toISOString(),
+		origin: info.origin,
+		url: info.url
 	};
 }
 
-export async function highlightElement(id: number | null): Promise<void> {
+export async function highlightIssue(id: number | null): Promise<void> {
 	await evalInPage(buildHighlightExpression(id));
 }
 
 export async function clearAudit(): Promise<void> {
 	await evalInPage(buildRemoveOverlayExpression());
+}
+
+export async function resetSession(origin?: string): Promise<void> {
+	const info = origin ? { origin } : await getPageInfo();
+	await chromeStorageSession.reset(info.origin);
 }

@@ -1,11 +1,17 @@
 <script lang="ts">
-	import { setApiKey } from '../../color-audit/api-key.ts';
+	import { setApiKey } from '../../shared/openai-key.ts';
 
 	interface Props {
+		title?: string;
+		description?: string;
 		onsaved: () => void;
 	}
 
-	let { onsaved }: Props = $props();
+	let {
+		title = 'OpenAI API Key Required',
+		description = 'This panel uses GPT-5.2-pro. Your key is stored locally in the extension and never sent elsewhere.',
+		onsaved
+	}: Props = $props();
 
 	let apiKey = $state('');
 	let showKey = $state(false);
@@ -41,7 +47,6 @@
 		class="w-full max-w-md rounded-xl border p-8 shadow-sm"
 		style="border-color: var(--panel-border); background-color: var(--panel-bg-elevated);"
 	>
-		<!-- Icon -->
 		<div class="mb-6 flex justify-center">
 			<div
 				class="flex h-14 w-14 items-center justify-center rounded-full"
@@ -65,11 +70,10 @@
 		</div>
 
 		<h2 class="mb-2 text-center text-base font-semibold text-[var(--panel-text)]">
-			OpenAI API Key Required
+			{title}
 		</h2>
 		<p class="mb-6 text-center text-xs leading-relaxed text-[var(--panel-text-muted)]">
-			The Color Audit panel uses GPT-5.2-pro to intelligently identify and group colors from the
-			inspected page. Your key is stored locally in the extension and never sent elsewhere.
+			{description}
 		</p>
 
 		{#if error}

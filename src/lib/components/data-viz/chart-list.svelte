@@ -1,68 +1,101 @@
 <script lang="ts">
 	import type { DetectedChart } from '../../data-viz/types.ts';
 	import ChartCard from './chart-card.svelte';
+	import StatTile from '../ui/stat-tile.svelte';
 
 	interface Props {
 		charts: DetectedChart[];
 		selectedId: number | null;
 		onselect: (id: number) => void;
+		onanalyze: (id: number) => void;
 	}
 
-	let { charts, selectedId, onselect }: Props = $props();
+	let { charts, selectedId, onselect, onanalyze }: Props = $props();
 
-	let svgCount = $derived(charts.filter((c) => c.type === 'svg').length);
-	let canvasCount = $derived(charts.filter((c) => c.type === 'canvas').length);
-	let imgCount = $derived(charts.filter((c) => c.type === 'img').length);
-	let containerCount = $derived(charts.filter((c) => c.type === 'container').length);
-	let missingNames = $derived(charts.filter((c) => !c.hasAccessibleName).length);
-	let missingFallbacks = $derived(
+	const missingNames = $derived(charts.filter((c) => !c.hasAccessibleName).length);
+	const missingFallbacks = $derived(
 		charts.filter((c) => !c.captionText && !c.hasTableFallback).length
 	);
-	let keyboardRisks = $derived(charts.filter((c) => !c.supportsKeyboard).length);
+	const keyboardRisks = $derived(charts.filter((c) => !c.supportsKeyboard).length);
+	const contradicted = $derived(
+		charts.filter(
+			(c) =>
+				(c.analysis?.verificationClaims.filter((v) => v.verdict === 'contradicted').length ?? 0) >
+				0
+		).length
+	);
+	const analyzed = $derived(charts.filter((c) => c.analysisState === 'done').length);
+	const scoreDist = $derived.by(() => {
+		const bands = { low: 0, mid: 0, high: 0 };
+		for (const c of charts) {
+			const s = c.scores?.overall ?? 0;
+			if (s >= 0.8) bands.high++;
+			else if (s >= 0.5) bands.mid++;
+			else bands.low++;
+		}
+		return bands;
+	});
 </script>
 
-<!-- Summary bar -->
 <div
-	class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--panel-border)] px-3 py-2 text-[11px]"
-	style="background-color: var(--panel-summary-bg);"
+	class="grid grid-cols-2 gap-2 border-b px-3 py-3 md:grid-cols-5"
+	style="border-color: var(--panel-border); background-color: var(--panel-summary-bg);"
 >
-	<span class="font-semibold text-[var(--panel-text)]">
-		{charts.length} chart{charts.length !== 1 ? 's' : ''} found
-	</span>
-
-	{#if svgCount > 0}
-		<span class="text-[var(--panel-text-muted)]">SVG: {svgCount}</span>
-	{/if}
-	{#if canvasCount > 0}
-		<span class="text-[var(--panel-text-muted)]">Canvas: {canvasCount}</span>
-	{/if}
-	{#if imgCount > 0}
-		<span class="text-[var(--panel-text-muted)]">Image: {imgCount}</span>
-	{/if}
-	{#if containerCount > 0}
-		<span class="text-[var(--panel-text-muted)]">Container: {containerCount}</span>
-	{/if}
-
-	{#if missingNames > 0}
-		<span class="ml-auto" style="color: var(--panel-warning-text);">
-			{missingNames} missing accessible name{missingNames !== 1 ? 's' : ''}
-		</span>
-	{/if}
-	{#if missingFallbacks > 0}
-		<span style="color: var(--panel-warning-text);">
-			{missingFallbacks} missing summary/table fallback
-		</span>
-	{/if}
-	{#if keyboardRisks > 0}
-		<span style="color: var(--panel-warning-text);">
-			{keyboardRisks} keyboard risk{keyboardRisks !== 1 ? 's' : ''}
-		</span>
-	{/if}
+	<StatTile label="Charts" value={charts.length} />
+	<StatTile
+		label="Analyzed"
+		value={analyzed}
+		accent={analyzed === charts.length ? 'ok' : 'default'}
+	/>
+	<StatTile label="Missing names" value={missingNames} accent={missingNames ? 'warn' : 'default'} />
+	<StatTile
+		label="No fallback"
+		value={missingFallbacks}
+		accent={missingFallbacks ? 'warn' : 'default'}
+	/>
+	<StatTile label="Contradicted" value={contradicted} accent={contradicted ? 'bad' : 'default'} />
 </div>
 
-<!-- Chart list -->
+<div
+	class="flex items-center gap-2 border-b px-3 py-2 text-[10px] text-[var(--panel-text-muted)]"
+	style="border-color: var(--panel-border);"
+>
+	<span class="font-semibold tracking-wide text-[var(--panel-text)] uppercase">Overall score</span>
+	<div
+		class="flex h-1.5 flex-1 overflow-hidden rounded-full"
+		style="background-color: var(--panel-hover);"
+	>
+		<span
+			style="background-color: var(--viz-bad); width: {(scoreDist.low /
+				Math.max(1, charts.length)) *
+				100}%;"
+		></span>
+		<span
+			style="background-color: var(--viz-warn); width: {(scoreDist.mid /
+				Math.max(1, charts.length)) *
+				100}%;"
+		></span>
+		<span
+			style="background-color: var(--viz-ok); width: {(scoreDist.high /
+				Math.max(1, charts.length)) *
+				100}%;"
+		></span>
+	</div>
+	<span class="tabular-nums">
+		<span style="color: var(--viz-bad);">{scoreDist.low}</span>
+		·
+		<span style="color: var(--viz-warn);">{scoreDist.mid}</span>
+		·
+		<span style="color: var(--viz-ok);">{scoreDist.high}</span>
+	</span>
+
+	<span class="ml-2 text-[10px] text-[var(--panel-text-subtle)]">
+		Keyboard risks: {keyboardRisks}
+	</span>
+</div>
+
 <div>
 	{#each charts as chart (chart.id)}
-		<ChartCard {chart} selected={selectedId === chart.id} {onselect} />
+		<ChartCard {chart} selected={selectedId === chart.id} {onselect} {onanalyze} />
 	{/each}
 </div>
