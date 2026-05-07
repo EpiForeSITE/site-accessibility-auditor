@@ -9,9 +9,8 @@ const PANEL_DIRS = [
 	'panel',
 	'panel-touch-viz',
 	'panel-color-audit',
-	'panel-tab-order',
-	'panel-states',
-	'panel-ax-tree'
+	'panel-reading-order',
+	'panel-states'
 ];
 
 function copyExtensionFiles() {
@@ -52,9 +51,8 @@ export default defineConfig({
 				panel: resolve(__dirname, 'src/panel/panel.html'),
 				'panel-touch-viz': resolve(__dirname, 'src/panel-touch-viz/panel-touch-viz.html'),
 				'panel-color-audit': resolve(__dirname, 'src/panel-color-audit/panel-color-audit.html'),
-				'panel-tab-order': resolve(__dirname, 'src/panel-tab-order/panel-tab-order.html'),
+				'panel-reading-order': resolve(__dirname, 'src/panel-reading-order/panel-reading-order.html'),
 				'panel-states': resolve(__dirname, 'src/panel-states/panel-states.html'),
-				'panel-ax-tree': resolve(__dirname, 'src/panel-ax-tree/panel-ax-tree.html'),
 				'service-worker': resolve(__dirname, 'src/background/service-worker.ts')
 			},
 			output: {

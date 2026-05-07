@@ -9,8 +9,8 @@
 		nodeMatchesQuery,
 		shortLabel,
 		type HierNode
-	} from '../../ax-tree/hierarchy-adapter.ts';
-	import type { DiffKind, DiffPair, TreeNode } from '../../ax-tree/types.ts';
+	} from '../../reading-order/hierarchy-adapter.ts';
+	import type { DiffKind, DiffPair, TreeNode } from '../../reading-order/types.ts';
 
 	interface Props {
 		forest: TreeNode[];
@@ -19,6 +19,7 @@
 		selectedKey: string | null;
 		followSelection: boolean;
 		fitVersion: number;
+		showTabPath: boolean;
 		onselect: (pair: DiffPair, key: string) => void;
 	}
 
@@ -29,6 +30,7 @@
 		selectedKey,
 		followSelection,
 		fitVersion,
+		showTabPath,
 		onselect
 	}: Props = $props();
 
@@ -59,7 +61,7 @@
 	const layout = $derived.by(() => {
 		const root = toHierarchyRoot(forest);
 		const h = hierarchy(root, (d) => d.children);
-		const treeLayout = tree<HierNode>().nodeSize([24, 180]);
+		const treeLayout = tree<HierNode>().nodeSize([26, 200]);
 		return treeLayout(h);
 	});
 
@@ -92,6 +94,38 @@
 			cur = cur.parent ?? null;
 		}
 		return set;
+	});
+
+	/**
+	 * Precompute node-link curves that connect consecutive tab steps so the
+	 * keyboard traversal is visible inside the tree context.
+	 */
+	const tabPathSegments = $derived.by<{ d: string; fromKey: string; toKey: string; drift: boolean }[]>(() => {
+		if (!showTabPath) return [];
+		const withTab = nodes
+			.filter((n) => !n.data.isSynthetic && n.data.pair && n.data.pair.entry.tabIndex !== null)
+			.sort(
+				(a, b) =>
+					(a.data.pair!.entry.tabIndex ?? 0) - (b.data.pair!.entry.tabIndex ?? 0)
+			);
+		const segs: { d: string; fromKey: string; toKey: string; drift: boolean }[] = [];
+		for (let i = 0; i < withTab.length - 1; i++) {
+			const a = withTab[i];
+			const b = withTab[i + 1];
+			const drift =
+				a.data.pair?.kind === 'tab-break' ||
+				b.data.pair?.kind === 'tab-break' ||
+				a.data.pair?.kind === 'positive-tabindex' ||
+				b.data.pair?.kind === 'positive-tabindex';
+			const mx = (a.y + b.y) / 2;
+			segs.push({
+				d: `M${a.y},${a.x} C${mx},${a.x} ${mx},${b.x} ${b.y},${b.x}`,
+				fromKey: a.data.key,
+				toKey: b.data.key,
+				drift
+			});
+		}
+		return segs;
 	});
 
 	function handleNodeClick(hn: HierarchyPointNode<HierNode>) {
@@ -183,7 +217,7 @@
 		}
 		const padX = 24;
 		const padY = 32;
-		const contentW = Math.max(1, maxY - minY + 160);
+		const contentW = Math.max(1, maxY - minY + 200);
 		const contentH = Math.max(1, maxX - minX + 16);
 		const nextScale = Math.max(
 			0.2,
@@ -234,8 +268,54 @@
 	class="relative h-full w-full overflow-hidden rounded-md border"
 	style="border-color: var(--panel-border); background-color: var(--panel-bg-elevated);"
 	role="application"
-	aria-label="Accessibility tree node-link diagram"
+	aria-label="Reading order tree"
 >
+	{#if showTabPath}
+		<div
+			class="absolute top-1.5 left-1.5 z-10 flex items-center gap-2 rounded border px-1.5 py-0.5 text-[9px]"
+			style="border-color: var(--panel-border); background-color: var(--panel-bg);"
+			aria-label="Tab path legend"
+		>
+			<span class="font-semibold tracking-wide uppercase" style:color="var(--panel-text-subtle)"
+				>Tab</span
+			>
+			<span class="flex items-center gap-1" style:color="var(--panel-text-muted)">
+				<span
+					class="inline-flex h-3 w-3 items-center justify-center rounded text-[7px] font-bold text-white"
+					style:background-color="var(--viz-accent)">1</span
+				>
+				step
+			</span>
+			<span class="flex items-center gap-1" style:color="var(--panel-text-muted)">
+				<svg width="16" height="6" aria-hidden="true"
+					><line
+						x1="1"
+						y1="3"
+						x2="15"
+						y2="3"
+						stroke="var(--viz-accent)"
+						stroke-width="1.5"
+						stroke-dasharray="3 2"
+					/></svg
+				>
+				path
+			</span>
+			<span class="flex items-center gap-1" style:color="var(--panel-text-muted)">
+				<svg width="16" height="6" aria-hidden="true"
+					><line
+						x1="1"
+						y1="3"
+						x2="15"
+						y2="3"
+						stroke="var(--viz-bad)"
+						stroke-width="1.5"
+						stroke-dasharray="3 2"
+					/></svg
+				>
+				break
+			</span>
+		</div>
+	{/if}
 	<div
 		class="absolute top-1.5 right-1.5 z-10 flex items-center gap-1 rounded border px-1 py-0.5 text-[9px] font-semibold"
 		style="border-color: var(--panel-border); background-color: var(--panel-bg);"
@@ -247,9 +327,11 @@
 				smooth = true;
 				scale = Math.max(0.2, scale * 0.85);
 			}}
-			aria-label="Zoom out"
-		>−</button>
-		<span class="tabular-nums" style:color="var(--panel-text-muted)">{Math.round(scale * 100)}%</span>
+			aria-label="Zoom out">−</button
+		>
+		<span class="tabular-nums" style:color="var(--panel-text-muted)"
+			>{Math.round(scale * 100)}%</span
+		>
 		<button
 			type="button"
 			class="rounded px-1 hover:bg-[var(--panel-hover)]"
@@ -257,15 +339,15 @@
 				smooth = true;
 				scale = Math.min(3, scale * 1.18);
 			}}
-			aria-label="Zoom in"
-		>+</button>
+			aria-label="Zoom in">+</button
+		>
 		<button
 			type="button"
 			class="rounded px-1 hover:bg-[var(--panel-hover)]"
 			onclick={fitToContent}
 			aria-label="Fit to view"
-			title="Fit visible nodes"
-		>Fit</button>
+			title="Fit visible nodes">Fit</button
+		>
 	</div>
 
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -302,12 +384,27 @@
 				{/each}
 			</g>
 
+			{#if showTabPath}
+				<g fill="none">
+					{#each tabPathSegments as seg (seg.fromKey + '|' + seg.toKey)}
+						<path
+							d={seg.d}
+							stroke={seg.drift ? 'var(--viz-bad)' : 'var(--viz-accent)'}
+							stroke-width="1.25"
+							stroke-dasharray="4 3"
+							opacity="0.55"
+						/>
+					{/each}
+				</g>
+			{/if}
+
 			<g>
 				{#each nodes as n (n.data.key)}
 					{#if !n.data.isSynthetic}
 						{@const color = kindColor(n.data.pair?.kind)}
 						{@const selected = n.data.key === selectedKey}
 						{@const dimmed = isDimmed(n)}
+						{@const tabIdx = n.data.pair?.entry.tabIndex ?? null}
 						<g
 							data-node
 							transform={`translate(${n.y},${n.x})`}
@@ -333,6 +430,28 @@
 								stroke-width={selected ? 2.5 : 1.5}
 								stroke-dasharray={n.data.isGhost ? '3 2' : '0'}
 							/>
+							{#if tabIdx !== null}
+								<g transform="translate(-14, -11)">
+									<rect
+										x="-8"
+										y="-6"
+										width="16"
+										height="12"
+										rx="4"
+										fill="var(--viz-accent)"
+										opacity="0.85"
+									/>
+									<text
+										x="0"
+										y="2.5"
+										font-size="8"
+										text-anchor="middle"
+										fill="white"
+										font-weight="700"
+										font-family="ui-monospace, monospace">{tabIdx + 1}</text
+									>
+								</g>
+							{/if}
 							<text
 								x={10}
 								y={3.5}
@@ -350,8 +469,7 @@
 	</svg>
 
 	{#if hovered && hovered.data.pair}
-		{@const ax = hovered.data.pair.ax}
-		{@const visual = hovered.data.pair.visual}
+		{@const entry = hovered.data.pair.entry}
 		<div
 			class="pointer-events-none absolute z-20 max-w-xs rounded border px-2 py-1 text-[10px] shadow-md"
 			style:left={`${hoverPos.x}px`}
@@ -366,14 +484,23 @@
 				<span
 					class="rounded px-1 text-[9px] font-bold tracking-wide uppercase"
 					style="background-color: color-mix(in srgb, var(--viz-accent) 14%, transparent); color: var(--viz-accent);"
-				>{ax?.role ?? visual?.role ?? visual?.tag ?? '?'}</span>
+					>{entry.ax?.role ?? entry.visual?.explicitRole ?? entry.tag}</span
+				>
 				<code
 					class="rounded px-1 text-[9px]"
 					style="background-color: var(--panel-code-bg); color: var(--panel-text-muted);"
-				>&lt;{ax?.tag ?? visual?.tag ?? '?'}&gt;</code>
+					>&lt;{entry.tag}&gt;</code
+				>
+				{#if entry.tabIndex !== null}
+					<span
+						class="rounded px-1 text-[9px] font-bold"
+						style="background-color: color-mix(in srgb, var(--viz-accent) 22%, transparent); color: var(--viz-accent);"
+						>⌨ {entry.tabIndex + 1}</span
+					>
+				{/if}
 			</div>
 			<div class="mt-0.5 text-[10px]" style:color="var(--panel-text)">
-				{ax?.name || visual?.text || '(no name)'}
+				{entry.ax?.name || entry.visual?.text || '(no name)'}
 			</div>
 		</div>
 	{/if}

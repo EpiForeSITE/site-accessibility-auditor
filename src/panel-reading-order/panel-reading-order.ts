@@ -1,6 +1,6 @@
 import { mount } from 'svelte';
 import App from './App.svelte';
-import './panel-ax-tree.css';
+import './panel-reading-order.css';
 
 function applyDevToolsTheme(theme?: string): void {
 	const name = theme ?? chrome.devtools?.panels?.themeName ?? 'default';

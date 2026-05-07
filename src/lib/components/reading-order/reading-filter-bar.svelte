@@ -1,8 +1,8 @@
 <script lang="ts">
-	import type { AxTreeDiff, DiffKind } from '../../ax-tree/types.ts';
+	import type { DiffKind, ReadingOrderDiff } from '../../reading-order/types.ts';
 
 	interface Props {
-		diff: AxTreeDiff;
+		diff: ReadingOrderDiff;
 		filter: Set<DiffKind>;
 		query: string;
 		followSelection: boolean;
@@ -27,7 +27,10 @@
 		{ key: 'extra-in-ax', label: 'Extra in AX', glyph: '+', color: 'var(--viz-warn)' },
 		{ key: 'role-mismatch', label: 'Role mismatch', glyph: '≠', color: 'var(--viz-bad)' },
 		{ key: 'name-missing', label: 'Name missing', glyph: '!', color: 'var(--viz-warn)' },
-		{ key: 'order-drift', label: 'Order drift', glyph: '⇅', color: 'var(--viz-accent)' }
+		{ key: 'order-drift', label: 'Order drift', glyph: '⇅', color: 'var(--viz-accent)' },
+		{ key: 'tab-break', label: 'Tab break', glyph: '↯', color: 'var(--viz-bad)' },
+		{ key: 'tab-unreachable', label: 'No tab stop', glyph: '⌨', color: 'var(--viz-bad)' },
+		{ key: 'positive-tabindex', label: 'tabindex>0', glyph: '#', color: 'var(--viz-warn)' }
 	];
 
 	function toggle(kind: DiffKind) {
@@ -90,15 +93,13 @@
 				type="button"
 				onclick={() => onfollowchange(!followSelection)}
 				class="flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-all"
-				style:border-color={followSelection
-					? 'var(--panel-primary)'
-					: 'var(--panel-border)'}
+				style:border-color={followSelection ? 'var(--panel-primary)' : 'var(--panel-border)'}
 				style:background-color={followSelection
 					? 'color-mix(in srgb, var(--panel-primary) 18%, var(--panel-bg-elevated))'
 					: 'var(--panel-bg-elevated)'}
 				style:color={followSelection ? 'var(--panel-primary)' : 'var(--panel-text-muted)'}
 				aria-pressed={followSelection}
-				title="When on, selecting a node pans and zooms both views to it"
+				title="When on, selecting a node pans and zooms all views to it"
 			>
 				<span
 					class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px]"

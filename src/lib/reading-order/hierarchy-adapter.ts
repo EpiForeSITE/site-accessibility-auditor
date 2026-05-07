@@ -23,9 +23,7 @@ function fromTreeNode(node: TreeNode, depth: number): HierNode {
 }
 
 export function toHierarchyRoot(forest: TreeNode[]): HierNode {
-	if (forest.length === 1) {
-		return fromTreeNode(forest[0], 0);
-	}
+	if (forest.length === 1) return fromTreeNode(forest[0], 0);
 	return {
 		key: SYNTHETIC_ROOT_KEY,
 		pair: null,
@@ -46,7 +44,10 @@ const KIND_COLOR: Record<DiffKind, string> = {
 	'extra-in-ax': 'var(--viz-warn)',
 	'role-mismatch': 'var(--viz-bad)',
 	'name-missing': 'var(--viz-warn)',
-	'order-drift': 'var(--viz-accent)'
+	'order-drift': 'var(--viz-accent)',
+	'tab-break': 'var(--viz-bad)',
+	'tab-unreachable': 'var(--viz-bad)',
+	'positive-tabindex': 'var(--viz-warn)'
 };
 
 export function kindColor(kind: DiffKind | null | undefined): string {
@@ -60,7 +61,10 @@ const KIND_LABEL: Record<DiffKind, string> = {
 	'extra-in-ax': 'extra in AX',
 	'role-mismatch': 'role mismatch',
 	'name-missing': 'name missing',
-	'order-drift': 'order drift'
+	'order-drift': 'order drift',
+	'tab-break': 'tab break',
+	'tab-unreachable': 'not keyboard reachable',
+	'positive-tabindex': 'positive tabindex'
 };
 
 export function kindLabel(kind: DiffKind): string {
@@ -71,17 +75,15 @@ export function nodeMatchesQuery(node: HierNode, q: string): boolean {
 	if (!q) return true;
 	if (node.isSynthetic) return false;
 	const lower = q.toLowerCase();
-	const ax = node.pair?.ax;
-	const visual = node.pair?.visual;
+	const entry = node.pair?.entry;
+	if (!entry) return false;
 	const haystack = [
-		ax?.role,
-		ax?.name,
-		ax?.tag,
-		ax?.path,
-		visual?.tag,
-		visual?.text,
-		visual?.role,
-		visual?.path
+		entry.ax?.role,
+		entry.ax?.name,
+		entry.tag,
+		entry.path,
+		entry.visual?.text,
+		entry.visual?.explicitRole
 	]
 		.filter(Boolean)
 		.join(' ')
@@ -98,10 +100,10 @@ export function nodeMatchesFilter(node: HierNode, filter: Set<DiffKind>): boolea
 
 export function shortLabel(node: HierNode, max = 28): string {
 	if (node.isSynthetic) return 'root';
-	const ax = node.pair?.ax;
-	const visual = node.pair?.visual;
-	const name = (ax?.name || visual?.text || '').trim();
-	const role = ax?.role || visual?.role || visual?.tag || '?';
+	const entry = node.pair?.entry;
+	if (!entry) return '?';
+	const name = (entry.ax?.name || entry.visual?.text || '').trim();
+	const role = entry.ax?.role || entry.visual?.explicitRole || entry.tag;
 	const text = name ? `${role} · ${name}` : role;
 	return text.length > max ? text.slice(0, max - 1) + '…' : text;
 }
