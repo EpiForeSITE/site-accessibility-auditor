@@ -34,4 +34,4 @@ To remove all locally stored data (API key, audit history, settings), remove the
 
 ## Contact
 
-Questions or concerns: open an issue at [https://github.com/EpiForeSITE/site-accessibility-auditor/issues](https://github.com/EpiForeSITE/site-accessibility-auditor/issues).
+Questions or concerns: open an issue at [https://github.com/rahatzamancse/site-accessibility-auditor/issues](https://github.com/rahatzamancse/site-accessibility-auditor/issues).
