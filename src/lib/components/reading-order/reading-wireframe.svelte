@@ -204,6 +204,21 @@
 		return haystack.includes(lower);
 	}
 
+	// Larger cells cover more nested content, so their solid tint stacks up and
+	// hides the items inside them. Scale the fill down with the fraction of the
+	// page a cell occupies: big containers fade to a faint wash while small
+	// elements keep the full tint. Stroke stays fully opaque so the container
+	// outline is still readable.
+	const FILL_PCT_MAX = 14;
+	const FILL_PCT_MIN = 1.5;
+	function fillPctFor(cell: Cell): number {
+		const pageArea = fullBounds.w * fullBounds.h;
+		if (pageArea <= 0) return FILL_PCT_MAX;
+		const frac = (cell.w * cell.h) / pageArea;
+		const t = Math.min(1, frac / 0.12);
+		return FILL_PCT_MAX - (FILL_PCT_MAX - FILL_PCT_MIN) * t;
+	}
+
 	function handleClick(cell: Cell) {
 		onselect(cell.pair, cell.key);
 	}
@@ -519,6 +534,7 @@
 				{@const selected = cell.key === selectedKey}
 				{@const highlight = nodeMatches(cell.pair)}
 				{@const dimmed = (filter.size > 0 || query.length > 0) && !highlight}
+				{@const fillPct = fillPctFor(cell)}
 				<g
 					data-cell
 					class="cursor-pointer"
@@ -548,7 +564,7 @@
 						y={cell.y}
 						width={cell.w}
 						height={cell.h}
-						fill={cell.isGhost ? 'transparent' : `color-mix(in srgb, ${color} 22%, transparent)`}
+						fill={cell.isGhost ? 'transparent' : `color-mix(in srgb, ${color} ${fillPct}%, transparent)`}
 						stroke={selected ? 'var(--panel-primary)' : color}
 						stroke-width={selected ? 3 : 1.2}
 						stroke-dasharray={cell.isGhost ? '4 3' : '0'}
